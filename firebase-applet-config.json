@@ -1,0 +1,12 @@
+{
+  "projectId": "duty-schedule-tm",
+  "appId": "1:73899962523:web:a79016ad7462753ee2d63e",
+  "apiKey": "AIzaSyAKeKv54CBk8C68zuuAXYG0wt00nEmlIXU",
+  "authDomain": "duty-schedule-tm.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-a64c85d3-b5ca-4bbe-821d-53f766560089",
+  "storageBucket": "duty-schedule-tm.firebasestorage.app",
+  "messagingSenderId": "73899962523",
+  "measurementId": "",
+  "oAuthClientId": "73899962523-t1lbafp8cqorfu8vaurj5oj94q29m0nl.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

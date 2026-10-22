@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Staff": {
+      "title": "Staff",
+      "description": "Hospital staff member in Transfusion Medicine Department",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "englishName": { "type": "string", "maxLength": 128 },
+        "position": { "type": "string", "enum": ["MT", "AMT", "Office", "Service"] },
+        "section": { "type": "string", "enum": ["MT", "SUPPORT", "PART_TIME"] },
+        "order": { "type": "number" },
+        "role": { "type": "string", "enum": ["super_admin", "sub_admin", "staff"] },
+        "password": { "type": "string", "maxLength": 64 },
+        "mustChangePassword": { "type": "boolean" },
+        "defaultRoom": { "type": "string", "enum": ["lab", "donation", "both"] },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "name", "position", "section", "order", "role", "isActive"]
+    },
+    "ShiftDefinition": {
+      "title": "ShiftDefinition",
+      "description": "Configurable shift codes and position-specific compensation rates",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 8 },
+        "name": { "type": "string", "maxLength": 128 },
+        "isOt": { "type": "boolean" },
+        "otHours": { "type": "number" },
+        "rates": { "type": "object" },
+        "colorBg": { "type": "string", "maxLength": 32 },
+        "colorText": { "type": "string", "maxLength": 32 },
+        "colorBorder": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["code", "name", "rates"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Monthly duty schedule for transfusion medicine work rooms",
+      "type": "object",
+      "properties": {
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "room": { "type": "string", "enum": ["lab", "donation", "all"] },
+        "shifts": { "type": "object" },
+        "roomAssignments": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["year", "month", "room", "shifts"]
+    }
+  },
+  "firestore": {
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Department staff roster records"
+    },
+    "/shiftDefinitions/{code}": {
+      "schema": "ShiftDefinition",
+      "description": "Configured shift code definitions and rates"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Monthly duty schedule assignments"
+    }
+  }
+}
