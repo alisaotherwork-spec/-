@@ -16,13 +16,19 @@ import {
   saveCurrentUser,
   initializeFirestoreSync,
 } from './utils/storage';
-import { getDaysInMonth, generateAutoSchedule, THAI_MONTHS } from './utils/scheduler';
+import {
+  getDaysInMonth,
+  generateAutoSchedule,
+  generateMultiShiftAutoSchedule,
+  THAI_MONTHS,
+} from './utils/scheduler';
 import { calculateAllStaffMonthlySummaries } from './utils/calculator';
 import { exportDutyScheduleToExcel } from './utils/exportExcel';
 
 import { SolarSystemBackground } from './components/SolarSystemBackground';
 import { Header } from './components/Header';
 import { DutyTable } from './components/DutyTable';
+import { LoginView } from './components/LoginView';
 import { LoginModal } from './components/LoginModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { DailySummaryModal } from './components/DailySummaryModal';
@@ -30,6 +36,7 @@ import { OtClaimModal } from './components/OtClaimModal';
 import { PrintScheduleModal } from './components/PrintScheduleModal';
 import { StaffManagementModal } from './components/StaffManagementModal';
 import { ShiftRatesModal } from './components/ShiftRatesModal';
+import { AutoScheduleModal } from './components/AutoScheduleModal';
 import { BackupModal } from './components/BackupModal';
 
 export default function App() {
@@ -47,6 +54,7 @@ export default function App() {
 
   // Modals
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isAutoScheduleModalOpen, setIsAutoScheduleModalOpen] = useState(false);
   const [isDailySummaryOpen, setIsDailySummaryOpen] = useState(false);
   const [isOtClaimOpen, setIsOtClaimOpen] = useState(false);
   const [isPrintScheduleOpen, setIsPrintScheduleOpen] = useState(false);
@@ -56,6 +64,9 @@ export default function App() {
 
   // Notification Banner
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Active status filter for duty table ('active' | 'all' | 'inactive')
+  const [activeFilter, setActiveFilter] = useState<'active' | 'all' | 'inactive'>('active');
 
   // Days in selected month
   const daysInMonth = useMemo(() => getDaysInMonth(year, month), [year, month]);
@@ -97,11 +108,24 @@ export default function App() {
     }, 4000);
   };
 
-  // Filter staff based on room selection
+  // Filter staff based on room selection and Active status option
   const filteredStaff = useMemo(() => {
-    if (room === 'all') return staffList;
-    return staffList.filter((s) => s.defaultRoom === 'both' || s.defaultRoom === room || !s.defaultRoom);
-  }, [staffList, room]);
+    return staffList.filter((s) => {
+      // Room filter
+      const roomMatch =
+        room === 'all' || s.defaultRoom === 'both' || s.defaultRoom === room || !s.defaultRoom;
+
+      // Active status filter
+      const activeMatch =
+        activeFilter === 'all'
+          ? true
+          : activeFilter === 'active'
+          ? s.isActive !== false
+          : s.isActive === false;
+
+      return roomMatch && activeMatch;
+    });
+  }, [staffList, room, activeFilter]);
 
   // Calculate monthly summaries
   const summaries = useMemo(() => {
@@ -121,9 +145,7 @@ export default function App() {
     saveMonthSchedule(year, month, room, updated, roomAssignments);
   };
 
-  // Run auto-scheduler according to exact rule:
-  // Run auto-scheduler according to exact rule:
-  // Cascades 1 to 14, assigns 'บด', day 15 returns to 1, non-duty days are 100% empty blanks
+  // Quick 1-click Auto Schedule for 'บด'
   const handleRunAutoSchedule = () => {
     const newShifts = generateAutoSchedule({
       mtStaffList: staffList,
@@ -140,8 +162,7 @@ export default function App() {
     );
   };
 
-  // Run auto-scheduler for shift 'บ' with identical conditions:
-  // Cascades 1 to 14, assigns 'บ', day 15 returns to 1, non-duty days are 100% empty blanks
+  // Quick 1-click Auto Schedule for 'บ'
   const handleRunAutoScheduleB = () => {
     const newShifts = generateAutoSchedule({
       mtStaffList: staffList,
@@ -158,11 +179,39 @@ export default function App() {
     );
   };
 
+  // Multi-shift auto scheduler applied from AutoScheduleModal
+  const handleApplyMultiShiftAutoSchedule = (config: {
+    selectedShifts: string[];
+    targetSection: 'ALL' | 'MT' | 'SUPPORT' | 'PART_TIME';
+    targetRoom: RoomType | 'all';
+    startStaffOrder: number;
+    staggerMultipleShifts: boolean;
+    overwriteExisting: boolean;
+  }) => {
+    const newShifts = generateMultiShiftAutoSchedule({
+      staffList,
+      daysInMonth,
+      selectedShifts: config.selectedShifts,
+      targetSection: config.targetSection,
+      targetRoom: config.targetRoom,
+      startOrderIndex: config.startStaffOrder,
+      staggerMultipleShifts: config.staggerMultipleShifts,
+      overwriteExisting: config.overwriteExisting,
+      existingShifts: shiftsMap,
+    });
+
+    setShiftsMap(newShifts);
+    saveMonthSchedule(year, month, room, newShifts, roomAssignments);
+    showToast(
+      `จัดเวรอัตโนมัติสำเร็จ: [${config.selectedShifts.join(', ')}] ประจำเดือน ${THAI_MONTHS[month - 1]} พ.ศ. ${year + 543}`
+    );
+  };
+
   // Save updated staff list
   const handleSaveStaffList = (newStaffList: Staff[]) => {
     setStaffList(newStaffList);
     saveStaffList(newStaffList);
-    showToast('บันทึกรายชื่อเจ้าหน้าที่เรียบร้อยแล้ว');
+    showToast('บันทึกรายชื่อเจ้าหน้าที่และห้องปฏิบัติงานเรียบร้อยแล้ว');
   };
 
   // Save updated shift defs
@@ -172,7 +221,7 @@ export default function App() {
     showToast('บันทึกรหัสเวรและอัตราค่าตอบแทนเรียบร้อยแล้ว');
   };
 
-  // Handle sub-admin password change
+  // Handle password change
   const handlePasswordChanged = (staffId: string, newPass: string) => {
     const updatedStaff = staffList.map((s) =>
       s.id === staffId ? { ...s, password: newPass, mustChangePassword: false } : s
@@ -199,80 +248,108 @@ export default function App() {
   };
 
   const handleDownloadExcelSchedule = () => {
-    exportDutyScheduleToExcel(year, month, room, staffList, daysInMonth, shiftsMap, summaries);
+    exportDutyScheduleToExcel(year, month, room, filteredStaff, daysInMonth, shiftsMap, summaries);
     showToast('ส่งออกตารางเวรเป็นไฟล์ Excel (.xlsx) สำเร็จ');
   };
 
+  // Requirement 1: If not logged in, show Login Screen BEFORE entering the main page
+  if (!currentUser) {
+    return (
+      <LoginView
+        staffList={staffList}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          saveCurrentUser(user);
+          showToast(`ยินดีต้อนรับ: ${user.name}`);
+        }}
+      />
+    );
+  }
+
+  const isAnyPrintModalOpen = isDailySummaryOpen || isOtClaimOpen || isPrintScheduleOpen;
+  const canManage =
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'head' ||
+    currentUser?.role === 'sub_admin';
+
   return (
     <div className="min-h-screen relative overflow-x-hidden selection:bg-[#8B1E27] selection:text-white font-sans">
-      {/* Background Solar System Papercut */}
-      <SolarSystemBackground />
+      <div className={isAnyPrintModalOpen ? 'no-print' : ''}>
+        {/* Background Solar System Papercut */}
+        <SolarSystemBackground />
 
-      {/* Main Container */}
-      <div className="relative z-10 max-w-[1720px] mx-auto px-2 sm:px-4 py-4 sm:py-6 flex flex-col min-h-screen">
-        
-        {/* Toast Notification */}
-        {notification && (
-          <div className="fixed top-4 right-4 z-50 bg-[#8B1E27] text-white px-4 py-3 rounded-xl shadow-2xl border border-amber-300/40 text-xs sm:text-sm font-medium flex items-center gap-2 animate-in slide-in-from-top-4 duration-200">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span>{notification}</span>
-          </div>
-        )}
+        {/* Main Container */}
+        <div className="relative z-10 max-w-[1720px] mx-auto px-2 sm:px-4 py-4 sm:py-6 flex flex-col min-h-screen">
+          
+          {/* Toast Notification */}
+          {notification && (
+            <div className="fixed top-4 right-4 z-50 bg-[#8B1E27] text-white px-4 py-3 rounded-xl shadow-2xl border border-amber-300/40 text-xs sm:text-sm font-medium flex items-center gap-2 animate-in slide-in-from-top-4 duration-200">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>{notification}</span>
+            </div>
+          )}
 
-        {/* Top Header */}
-        <Header
-          year={year}
-          month={month}
-          room={room}
-          currentUser={currentUser}
-          onYearChange={setYear}
-          onMonthChange={setMonth}
-          onRoomChange={setRoom}
-          onOpenLogin={() => setIsLoginOpen(true)}
-          onLogout={handleLogout}
-          onOpenDailySummary={() => setIsDailySummaryOpen(true)}
-          onOpenOtClaim={() => setIsOtClaimOpen(true)}
-          onOpenPrintSchedule={() => setIsPrintScheduleOpen(true)}
-          onDownloadExcelSchedule={handleDownloadExcelSchedule}
-          onOpenStaffModal={() => setIsStaffModalOpen(true)}
-          onOpenShiftRatesModal={() => setIsShiftRatesModalOpen(true)}
-          onRunAutoSchedule={handleRunAutoSchedule}
-          onRunAutoScheduleB={handleRunAutoScheduleB}
-          onOpenBackupModal={() => setIsBackupModalOpen(true)}
-        />
-
-        {/* Schedule Board Table */}
-        <main className="flex-1 w-full">
-          <DutyTable
+          {/* Top Header */}
+          <Header
             year={year}
             month={month}
-            daysInMonth={daysInMonth}
             room={room}
-            staffList={filteredStaff}
-            shiftsMap={shiftsMap}
-            shiftDefs={shiftDefs}
-            summaries={summaries}
             currentUser={currentUser}
-            onUpdateShift={handleUpdateShift}
+            onYearChange={setYear}
+            onMonthChange={setMonth}
+            onRoomChange={setRoom}
+            onOpenLogin={() => setIsLoginOpen(true)}
+            onLogout={handleLogout}
+            onOpenDailySummary={() => setIsDailySummaryOpen(true)}
+            onOpenOtClaim={() => setIsOtClaimOpen(true)}
+            onOpenPrintSchedule={() => setIsPrintScheduleOpen(true)}
+            onDownloadExcelSchedule={handleDownloadExcelSchedule}
+            onOpenStaffModal={() => setIsStaffModalOpen(true)}
+            onOpenShiftRatesModal={() => setIsShiftRatesModalOpen(true)}
             onRunAutoSchedule={handleRunAutoSchedule}
             onRunAutoScheduleB={handleRunAutoScheduleB}
+            onOpenAutoScheduleModal={() => setIsAutoScheduleModalOpen(true)}
+            onOpenBackupModal={() => setIsBackupModalOpen(true)}
+            activeFilter={activeFilter}
+            onActiveFilterChange={setActiveFilter}
           />
-        </main>
 
-        {/* Footer */}
-        <footer className="mt-8 text-center text-xs text-amber-100/70 py-4 border-t border-amber-900/30 no-print flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            งานเวชศาสตร์บริการโลหิต โรงพยาบาลธรรมศาสตร์เฉลิมพระเกียรติ • โครงการ Firebase: duty-schedule-tm
-          </div>
-          <div className="flex items-center gap-3">
-            <span>หัวหน้างานเวชศาสตร์บริการโลหิต: ทนพญ.ณิชาภา เจียมจรรยา</span>
-            <span>•</span>
-            <span className="text-amber-300 font-medium">ธีม Papercut Solar System</span>
-          </div>
-        </footer>
+          {/* Schedule Board Table */}
+          <main className="flex-1 w-full">
+            <DutyTable
+              year={year}
+              month={month}
+              daysInMonth={daysInMonth}
+              room={room}
+              staffList={filteredStaff}
+              shiftsMap={shiftsMap}
+              shiftDefs={shiftDefs}
+              summaries={summaries}
+              currentUser={currentUser}
+              onUpdateShift={handleUpdateShift}
+              onRunAutoSchedule={handleRunAutoSchedule}
+              onRunAutoScheduleB={handleRunAutoScheduleB}
+              onOpenAutoScheduleModal={() => setIsAutoScheduleModalOpen(true)}
+              activeFilter={activeFilter}
+              onActiveFilterChange={setActiveFilter}
+            />
+          </main>
+
+          {/* Footer */}
+          <footer className="mt-8 text-center text-xs text-amber-100/70 py-4 border-t border-amber-900/30 no-print flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+              งานเวชศาสตร์บริการโลหิต โรงพยาบาลธรรมศาสตร์เฉลิมพระเกียรติ • โครงการ Firebase: duty-schedule-tm
+            </div>
+            <div className="flex items-center gap-3">
+              <span>หัวหน้างานเวชศาสตร์บริการโลหิต: ทนพญ.ณิชาภา เจียมจรรยา</span>
+              <span>•</span>
+              <span className="text-amber-300 font-medium">ธีม Papercut Solar System</span>
+            </div>
+          </footer>
+        </div>
       </div>
 
-      {/* Login Modal */}
+      {/* Login / Switch Account Modal */}
       <LoginModal
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
@@ -294,7 +371,20 @@ export default function App() {
         isMandatory={true}
       />
 
-      {/* Daily Shift Summary Modal (ใบสรุปเวรประจำวัน - ช่องขาว/ช่องเทา) */}
+      {/* Enhanced Multi-Shift Auto Scheduler Modal */}
+      <AutoScheduleModal
+        isOpen={isAutoScheduleModalOpen}
+        onClose={() => setIsAutoScheduleModalOpen(false)}
+        year={year}
+        month={month}
+        daysInMonth={daysInMonth}
+        room={room}
+        staffList={staffList}
+        shiftDefs={shiftDefs}
+        onApplyAutoSchedule={handleApplyMultiShiftAutoSchedule}
+      />
+
+      {/* Daily Shift Summary Modal (ใบสรุปเวรประจำวัน) */}
       <DailySummaryModal
         isOpen={isDailySummaryOpen}
         onClose={() => setIsDailySummaryOpen(false)}
@@ -335,13 +425,13 @@ export default function App() {
         summaries={summaries}
       />
 
-      {/* Staff Management Modal */}
+      {/* Staff Management Modal with Room Assignment */}
       <StaffManagementModal
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}
         staffList={staffList}
         onSaveStaffList={handleSaveStaffList}
-        canManage={currentUser?.role === 'super_admin' || currentUser?.role === 'sub_admin'}
+        canManage={canManage}
       />
 
       {/* Shift Codes & Rates Modal */}
@@ -350,7 +440,7 @@ export default function App() {
         onClose={() => setIsShiftRatesModalOpen(false)}
         shiftDefs={shiftDefs}
         onSaveShiftDefs={handleSaveShiftDefs}
-        canEdit={currentUser?.role === 'super_admin' || currentUser?.role === 'sub_admin'}
+        canEdit={currentUser?.role === 'super_admin' || currentUser?.role === 'head'}
       />
 
       {/* Backup and Cloud Sync Modal */}

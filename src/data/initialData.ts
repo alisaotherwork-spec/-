@@ -9,7 +9,8 @@ export const INITIAL_STAFF: Staff[] = [
     position: 'MT',
     section: 'MT',
     order: 1,
-    role: 'super_admin', // หัวหน้างานเวชศาสตร์บริการโลหิต
+    role: 'head', // หัวหน้าห้อง / หัวหน้างานเวชศาสตร์บริการโลหิต (ไม่ใช่ super_admin)
+    password: '1234',
     defaultRoom: 'both',
     isActive: true,
   },

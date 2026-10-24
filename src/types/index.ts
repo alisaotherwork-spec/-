@@ -2,7 +2,7 @@ export type Position = 'MT' | 'AMT' | 'Office' | 'Service';
 
 export type StaffSection = 'MT' | 'SUPPORT' | 'PART_TIME';
 
-export type UserRole = 'super_admin' | 'sub_admin' | 'staff';
+export type UserRole = 'super_admin' | 'head' | 'sub_admin' | 'staff';
 
 export type RoomType = 'lab' | 'donation';
 
@@ -18,6 +18,15 @@ export interface Staff {
   mustChangePassword?: boolean;
   defaultRoom?: RoomType | 'both';
   isActive: boolean;
+}
+
+export interface MultiShiftAutoScheduleConfig {
+  selectedShifts: string[]; // Shift codes e.g. ['บด', 'บ', 'ช']
+  targetSection: 'ALL' | 'MT' | 'SUPPORT' | 'PART_TIME';
+  targetRoom: RoomType | 'all';
+  startStaffOrder: number;
+  staggerMultipleShifts: boolean; // avoid double booking on the same day
+  overwriteExisting: boolean;
 }
 
 export interface ShiftDefinition {

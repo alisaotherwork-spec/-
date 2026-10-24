@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Staff, CurrentUser } from '../types';
 import { SUPER_ADMIN_CREDENTIALS, SUB_ADMIN_DEFAULT_PASSWORD } from '../data/initialData';
-import { ShieldCheck, UserCheck, KeyRound, User, Lock, AlertCircle } from 'lucide-react';
+import { KeyRound, User, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -18,107 +18,80 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   currentUser,
   onLoginSuccess,
 }) => {
-  const [tab, setTab] = useState<'super_admin' | 'sub_admin' | 'staff'>('super_admin');
-  
-  // Super admin credentials
-  const [superUsername, setSuperUsername] = useState('alisa');
-  const [superPassword, setSuperPassword] = useState('');
-
-  // Sub admin credentials
-  const [subStaffId, setSubStaffId] = useState<string>('staff-11');
-  const [subPassword, setSubPassword] = useState('');
-
-  // Staff search
-  const [searchName, setSearchName] = useState('');
-  const [selectedStaffId, setSelectedStaffId] = useState('');
-
+  const [usernameOrName, setUsernameOrName] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSuperLogin = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (
-      superUsername.trim() === SUPER_ADMIN_CREDENTIALS.username &&
-      superPassword.trim() === SUPER_ADMIN_CREDENTIALS.password
-    ) {
-      const superStaff = staffList.find((s) => s.id === 'staff-1') || staffList[0];
-      onLoginSuccess({
-        id: 'super-admin-alisa',
-        username: 'alisa',
-        name: superStaff ? `${superStaff.name} (หัวหน้างาน)` : 'ทนพญ.ณิชาภา เจียมจรรยา (หัวหน้างาน)',
-        role: 'super_admin',
-        staffId: superStaff?.id,
-        mustChangePassword: false,
-      });
-      onClose();
-    } else {
-      setError('ชื่อผู้ใช้หรือรหัสผ่านผู้ดูแลระบบสูงสุดไม่ถูกต้อง (alisa / 1450)');
-    }
-  };
+    const inputUser = usernameOrName.trim();
+    const inputPass = password.trim();
 
-  const handleSubLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const staff = staffList.find((s) => s.id === subStaffId);
-    if (!staff) {
-      setError('กรุณาเลือกผู้ดูแลระบบย่อย');
+    if (!inputUser || !inputPass) {
+      setError('กรุณากรอกชื่อผู้ใช้งาน หรือ ชื่อ-สกุล และรหัสผ่าน');
       return;
     }
 
-    const expectedPass = staff.password || SUB_ADMIN_DEFAULT_PASSWORD;
-    if (subPassword.trim() === expectedPass) {
-      const isDefault = subPassword.trim() === SUB_ADMIN_DEFAULT_PASSWORD;
+    // 1. Super Admin
+    if (
+      inputUser.toLowerCase() === SUPER_ADMIN_CREDENTIALS.username.toLowerCase() &&
+      inputPass === SUPER_ADMIN_CREDENTIALS.password
+    ) {
+      const superStaff = staffList.find((s) => s.role === 'super_admin') || {
+        id: 'staff-super',
+        name: 'ผู้ดูแลระบบสูงสุด (Super Admin)',
+      };
       onLoginSuccess({
-        id: `sub-admin-${staff.id}`,
-        username: staff.name,
-        name: `${staff.name} (ผู้ดูแลระบบย่อย)`,
-        role: 'sub_admin',
-        staffId: staff.id,
-        mustChangePassword: isDefault || !!staff.mustChangePassword,
+        id: 'super-admin-alisa',
+        username: 'alisa',
+        name: superStaff.name,
+        role: 'super_admin',
+        staffId: superStaff.id,
+        mustChangePassword: false,
       });
       onClose();
-    } else {
-      setError('รหัสผ่านไม่ถูกต้อง (รหัสเริ่มต้นคือ 1234)');
+      return;
     }
-  };
 
-  const handleStaffLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    let matchedStaff: Staff | undefined;
-    if (selectedStaffId) {
-      matchedStaff = staffList.find((s) => s.id === selectedStaffId);
-    } else if (searchName.trim()) {
-      const term = searchName.trim().toLowerCase();
-      matchedStaff = staffList.find(
-        (s) =>
-          s.name.toLowerCase().includes(term) ||
-          (s.englishName && s.englishName.toLowerCase().includes(term))
+    // 2. Search staff by Name or ID
+    const query = inputUser.toLowerCase();
+    const matchedStaff = staffList.find((s) => {
+      const thaiName = s.name.toLowerCase();
+      const engName = s.englishName ? s.englishName.toLowerCase() : '';
+      return (
+        thaiName === query ||
+        engName === query ||
+        thaiName.includes(query) ||
+        (engName && engName.includes(query)) ||
+        s.id.toLowerCase() === query
       );
-    }
+    });
 
     if (matchedStaff) {
-      onLoginSuccess({
-        id: `staff-${matchedStaff.id}`,
-        name: matchedStaff.name,
-        role: 'staff',
-        staffId: matchedStaff.id,
-      });
-      onClose();
-    } else {
-      setError('ไม่พบรายชื่อเจ้าหน้าที่ กรุณาพิมพ์ชื่อภาษาไทยหรืออังกฤษ หรือเลือกจากรายการ');
+      const expectedPass = matchedStaff.password || SUB_ADMIN_DEFAULT_PASSWORD;
+      if (inputPass === expectedPass) {
+        const role = matchedStaff.id === 'staff-1' ? 'head' : matchedStaff.role;
+        onLoginSuccess({
+          id: `user-${matchedStaff.id}`,
+          username: matchedStaff.englishName || matchedStaff.name,
+          name: matchedStaff.name,
+          role,
+          staffId: matchedStaff.id,
+          mustChangePassword:
+            (role === 'sub_admin' || role === 'head') &&
+            inputPass === SUB_ADMIN_DEFAULT_PASSWORD &&
+            matchedStaff.mustChangePassword,
+        });
+        onClose();
+        return;
+      }
     }
-  };
 
-  const subAdminCandidates = staffList.filter((s) => s.role === 'sub_admin' || s.id === 'staff-11');
-  const filteredStaff = staffList.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchName.toLowerCase()) ||
-      (s.englishName && s.englishName.toLowerCase().includes(searchName.toLowerCase()))
-  );
+    setError('ชื่อผู้ใช้งาน หรือ รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -130,55 +103,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <KeyRound className="w-5 h-5 text-amber-200" />
             </div>
             <div>
-              <h3 className="font-heading font-semibold text-lg">เข้าสู่ระบบการทำงาน</h3>
+              <h3 className="font-heading font-semibold text-lg">เข้าสู่ระบบ / สลับบัญชี</h3>
               <p className="text-xs text-amber-100/80">เวชศาสตร์บริการโลหิต รพ.ธรรมศาสตร์ฯ</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             ✕
-          </button>
-        </div>
-
-        {/* Tab selection */}
-        <div className="flex border-b border-[#E5D5C5] bg-[#F7F2EA] p-1 text-xs sm:text-sm font-medium">
-          <button
-            type="button"
-            onClick={() => { setTab('super_admin'); setError(null); }}
-            className={`flex-1 py-2 text-center rounded-md transition-all flex items-center justify-center gap-1.5 ${
-              tab === 'super_admin'
-                ? 'bg-[#8B1E27] text-white shadow-sm'
-                : 'text-[#6D4C41] hover:bg-[#EFE7DC]'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            ผู้ดูแลสูงสุด
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('sub_admin'); setError(null); }}
-            className={`flex-1 py-2 text-center rounded-md transition-all flex items-center justify-center gap-1.5 ${
-              tab === 'sub_admin'
-                ? 'bg-[#8B1E27] text-white shadow-sm'
-                : 'text-[#6D4C41] hover:bg-[#EFE7DC]'
-            }`}
-          >
-            <UserCheck className="w-4 h-4" />
-            ผู้ดูแลระบบย่อย
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('staff'); setError(null); }}
-            className={`flex-1 py-2 text-center rounded-md transition-all flex items-center justify-center gap-1.5 ${
-              tab === 'staff'
-                ? 'bg-[#8B1E27] text-white shadow-sm'
-                : 'text-[#6D4C41] hover:bg-[#EFE7DC]'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            เจ้าหน้าที่ทั่วไป
           </button>
         </div>
 
@@ -191,145 +124,49 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           )}
 
-          {tab === 'super_admin' && (
-            <form onSubmit={handleSuperLogin} className="space-y-4">
-              <div className="text-xs text-[#7A5B47] mb-2">
-                ผู้ดูแลระบบสูงสุดสามารถจัดการได้ทุกส่วนในระบบ เช่น แก้ไขเวรทุกคน จัดเวรอัตโนมัติ เพิ่ม/ลบเจ้าหน้าที่ และแก้ไขราคาค่าเวร
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  ชื่อผู้ใช้งาน (Username)
-                </label>
-                <input
-                  type="text"
-                  value={superUsername}
-                  onChange={(e) => setSuperUsername(e.target.value)}
-                  placeholder="alisa"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  รหัสผ่าน (Password)
-                </label>
-                <input
-                  type="password"
-                  value={superPassword}
-                  onChange={(e) => setSuperPassword(e.target.value)}
-                  placeholder="••••"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
-                  required
-                />
-                <p className="text-[11px] text-[#A88B74] mt-1">รหัสเริ่มต้น: 1450</p>
-              </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#4A2E18] mb-1 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-[#8B1E27]" />
+                <span>ชื่อผู้ใช้งาน หรือ ชื่อ - นามสกุล *</span>
+              </label>
+              <input
+                type="text"
+                value={usernameOrName}
+                onChange={(e) => setUsernameOrName(e.target.value)}
+                placeholder="พิมพ์ชื่อผู้ใช้ หรือ ชื่อ-สกุล (ไทย / อังกฤษ)"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
+                required
+                autoFocus
+              />
+              <p className="text-[11px] text-[#A88B74] mt-1">
+                เช่น alisa, ณิชาภา, Nichapa, ปนัสยา, สิริยากร...
+              </p>
+            </div>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 px-4 bg-[#8B1E27] hover:bg-[#721820] text-white rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                เข้าสู่ระบบผู้ดูแลสูงสุด
-              </button>
-            </form>
-          )}
+            <div>
+              <label className="block text-xs font-semibold text-[#4A2E18] mb-1 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-[#8B1E27]" />
+                <span>รหัสผ่าน *</span>
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
+                required
+              />
+            </div>
 
-          {tab === 'sub_admin' && (
-            <form onSubmit={handleSubLogin} className="space-y-4">
-              <div className="text-xs text-[#7A5B47] mb-2">
-                ผู้ดูแลระบบย่อยสามารถแก้ไขเวรได้ทุกคน และเพิ่ม/แก้ไขเจ้าหน้าที่ได้ (ใส่รหัสเริ่มต้น 1234 และระบบจะให้เปลี่ยนรหัสผ่านทันที)
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  เลือกผู้ดูแลระบบย่อย
-                </label>
-                <select
-                  value={subStaffId}
-                  onChange={(e) => setSubStaffId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
-                >
-                  {subAdminCandidates.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.position})
-                    </option>
-                  ))}
-                  {subAdminCandidates.length === 0 && (
-                    <option value="staff-11">ทนพญ.ปนัสยา รัสสุรีย์</option>
-                  )}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  รหัสผ่าน (เข้าใช้งานครั้งแรก: 1234)
-                </label>
-                <input
-                  type="password"
-                  value={subPassword}
-                  onChange={(e) => setSubPassword(e.target.value)}
-                  placeholder="1234"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 px-4 bg-[#8B1E27] hover:bg-[#721820] text-white rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <UserCheck className="w-4 h-4" />
-                เข้าสู่ระบบผู้ดูแลระบบย่อย
-              </button>
-            </form>
-          )}
-
-          {tab === 'staff' && (
-            <form onSubmit={handleStaffLogin} className="space-y-4">
-              <div className="text-xs text-[#7A5B47] mb-2">
-                เจ้าหน้าที่ทั่วไปสามารถพิมพ์ชื่อภาษาไทย หรือ ภาษาอังกฤษ เพื่อเข้าใช้งานและแก้ไขเวรเฉพาะของตนเองได้
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  ค้นหาชื่อภาษาไทย หรือ ภาษาอังกฤษ
-                </label>
-                <input
-                  type="text"
-                  value={searchName}
-                  onChange={(e) => {
-                    setSearchName(e.target.value);
-                    setSelectedStaffId('');
-                  }}
-                  placeholder="เช่น ณิชาภา, นิชาภา, Nichapa, สิริยากร..."
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#4A2E18] mb-1">
-                  หรือเลือกจากรายชื่อ ({filteredStaff.length} คน)
-                </label>
-                <select
-                  value={selectedStaffId}
-                  onChange={(e) => setSelectedStaffId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#D8C7B5] bg-white focus:outline-none focus:ring-2 focus:ring-[#8B1E27] max-h-32"
-                >
-                  <option value="">-- เลือกเจ้าหน้าที่จากรายการ --</option>
-                  {filteredStaff.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.order}. {s.name} ({s.position})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 px-4 bg-[#6D4C41] hover:bg-[#58392F] text-white rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <User className="w-4 h-4" />
-                เข้าใช้งานในฐานะเจ้าหน้าที่
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              className="w-full py-2.5 px-4 bg-[#8B1E27] hover:bg-[#721820] text-white rounded-lg font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>เข้าสู่ระบบ</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
         </div>
       </div>
     </div>

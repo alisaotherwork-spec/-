@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Staff, ShiftDefinition, MonthlyStaffSummary, RoomType, CurrentUser } from '../types';
 import { getDayOfWeekThai, isWeekend } from '../utils/scheduler';
 import { formatBaht } from '../utils/calculator';
-import { Lock, Sparkles, Check, X, ShieldAlert } from 'lucide-react';
+import { Lock, Sparkles, Check, X, ShieldAlert, UserCheck } from 'lucide-react';
 
 interface DutyTableProps {
   year: number;
@@ -17,6 +17,9 @@ interface DutyTableProps {
   onUpdateShift: (staffId: string, day: number, newCode: string) => void;
   onRunAutoSchedule: () => void;
   onRunAutoScheduleB: () => void;
+  onOpenAutoScheduleModal?: () => void;
+  activeFilter?: 'active' | 'all' | 'inactive';
+  onActiveFilterChange?: (filter: 'active' | 'all' | 'inactive') => void;
 }
 
 export const DutyTable: React.FC<DutyTableProps> = ({
@@ -32,6 +35,9 @@ export const DutyTable: React.FC<DutyTableProps> = ({
   onUpdateShift,
   onRunAutoSchedule,
   onRunAutoScheduleB,
+  onOpenAutoScheduleModal,
+  activeFilter = 'active',
+  onActiveFilterChange,
 }) => {
   const [activeCell, setActiveCell] = useState<{ staffId: string; day: number } | null>(null);
   const [customInput, setCustomInput] = useState('');
@@ -72,8 +78,13 @@ export const DutyTable: React.FC<DutyTableProps> = ({
   // Check permission for a specific staff member
   const canEditStaffDuty = (targetStaffId: string): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'super_admin' || currentUser.role === 'sub_admin') {
-      return true; // Super Admin & Sub Admin can edit everyone
+    // Super Admin, Section Head (Nichapa), and Sub Admin can edit everyone
+    if (
+      currentUser.role === 'super_admin' ||
+      currentUser.role === 'head' ||
+      currentUser.role === 'sub_admin'
+    ) {
+      return true;
     }
     // General staff can ONLY edit their own shifts
     return currentUser.staffId === targetStaffId;
@@ -181,26 +192,50 @@ export const DutyTable: React.FC<DutyTableProps> = ({
                           </span>
                         </div>
 
-                        {sec.id === 'MT' && (currentUser?.role === 'super_admin' || currentUser?.role === 'sub_admin') && (
+                        {sec.id === 'MT' && (currentUser?.role === 'super_admin' || currentUser?.role === 'head' || currentUser?.role === 'sub_admin') && (
                           <div className="flex items-center gap-1.5 no-print">
+                            {onOpenAutoScheduleModal && (
+                              <button
+                                type="button"
+                                onClick={onOpenAutoScheduleModal}
+                                className="text-xs px-2.5 py-1 bg-[#8B1E27] hover:bg-[#721820] text-white rounded-md flex items-center gap-1.5 transition-transform hover:scale-[1.02] shadow-xs cursor-pointer font-bold ring-1 ring-amber-300"
+                                title="จัดเวรอัตโนมัติได้ทุกเวรที่มี โดยสามารถเลือกหลายเวรพร้อมกัน"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                ⚡ จัดเวรอัตโนมัติ (เลือกหลายเวร)
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={onRunAutoSchedule}
-                              className="text-xs px-2.5 py-1 bg-[#8B1E27] hover:bg-[#721820] text-white rounded-md flex items-center gap-1.5 transition-transform hover:scale-[1.02] shadow-xs cursor-pointer"
+                              className="text-xs px-2.5 py-1 bg-white hover:bg-stone-100 text-[#8B1E27] border border-amber-300 rounded-md flex items-center gap-1 transition-colors cursor-pointer font-medium"
                               title="จัดเวร บด อัตโนมัติ วน 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือนตามข้อกำหนด"
                             >
-                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                              จัดเวร บด อัตโนมัติ (วน 1-14)
+                              จัดเวร บด
                             </button>
                             <button
                               type="button"
                               onClick={onRunAutoScheduleB}
-                              className="text-xs px-2.5 py-1 bg-[#B45309] hover:bg-[#92400E] text-white rounded-md flex items-center gap-1.5 transition-transform hover:scale-[1.02] shadow-xs cursor-pointer"
+                              className="text-xs px-2.5 py-1 bg-white hover:bg-stone-100 text-[#92400E] border border-amber-300 rounded-md flex items-center gap-1 transition-colors cursor-pointer font-medium"
                               title="จัดเวร บ อัตโนมัติ วน 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือนตามข้อกำหนด"
                             >
-                              <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                              จัดเวร บ อัตโนมัติ (วน 1-14)
+                              จัดเวร บ
                             </button>
+                            {onActiveFilterChange && (
+                              <button
+                                type="button"
+                                onClick={() => onActiveFilterChange(activeFilter === 'active' ? 'all' : 'active')}
+                                className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors cursor-pointer font-medium border ${
+                                  activeFilter === 'active'
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : 'bg-white hover:bg-stone-100 text-stone-700 border-stone-300'
+                                }`}
+                                title="คลิกเพื่อสลับการแสดงเฉพาะ Active หรือ ทั้งหมด"
+                              >
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>{activeFilter === 'active' ? 'เฉพาะ Active' : 'แสดงทั้งหมด'}</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -238,9 +273,16 @@ export const DutyTable: React.FC<DutyTableProps> = ({
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span>{staff.name}</span>
+                            <span className="flex items-center gap-1.5">
+                              <span>{staff.name}</span>
+                              {staff.isActive === false && (
+                                <span className="text-[10px] px-1 py-0.2 bg-stone-200 text-stone-600 rounded border border-stone-300">
+                                  Inactive
+                                </span>
+                              )}
+                            </span>
                             {isCurrentUserRow && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-[#8B1E27] text-white rounded-sm font-semibold">
+                              <span className="text-[10px] px-1.5 py-0.2 bg-[#8B1E27] text-white rounded-sm font-semibold shrink-0">
                                 คุณ
                               </span>
                             )}

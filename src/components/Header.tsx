@@ -20,6 +20,8 @@ import {
   Building2,
   Clock,
   Layers,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -40,7 +42,10 @@ interface HeaderProps {
   onOpenShiftRatesModal: () => void;
   onRunAutoSchedule: () => void;
   onRunAutoScheduleB: () => void;
+  onOpenAutoScheduleModal: () => void;
   onOpenBackupModal: () => void;
+  activeFilter?: 'active' | 'all' | 'inactive';
+  onActiveFilterChange?: (filter: 'active' | 'all' | 'inactive') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -61,7 +66,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenShiftRatesModal,
   onRunAutoSchedule,
   onRunAutoScheduleB,
+  onOpenAutoScheduleModal,
   onOpenBackupModal,
+  activeFilter = 'active',
+  onActiveFilterChange,
 }) => {
   const thaiYear = year + 543;
   const monthName = THAI_MONTHS[month - 1];
@@ -85,8 +93,9 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isHead = currentUser?.role === 'head';
   const isSubAdmin = currentUser?.role === 'sub_admin';
-  const canManage = isSuperAdmin || isSubAdmin;
+  const canManage = isSuperAdmin || isHead || isSubAdmin;
 
   return (
     <header className="relative z-10 w-full mb-6 no-print">
@@ -134,6 +143,11 @@ export const Header: React.FC<HeaderProps> = ({
                     {currentUser.role === 'super_admin' && (
                       <span className="px-1.5 py-0.2 bg-red-600 text-white rounded-xs text-[10px] font-bold">
                         Super Admin
+                      </span>
+                    )}
+                    {currentUser.role === 'head' && (
+                      <span className="px-1.5 py-0.2 bg-emerald-600 text-white rounded-xs text-[10px] font-bold">
+                        หัวหน้าห้อง
                       </span>
                     )}
                     {currentUser.role === 'sub_admin' && (
@@ -301,6 +315,24 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+
+          {/* Active Status Filter Option for Duty Table */}
+          {onActiveFilterChange && (
+            <div className="flex items-center gap-1.5 bg-[#F5EFE6] border border-[#D8C7B5] rounded-lg px-2.5 py-1.5 shadow-2xs">
+              <UserCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span className="text-xs font-semibold text-[#4A2E18]">ตัวเลือกแสดงชื่อ:</span>
+              <select
+                value={activeFilter}
+                onChange={(e) => onActiveFilterChange(e.target.value as 'active' | 'all' | 'inactive')}
+                className="bg-transparent font-bold text-xs text-stone-900 focus:outline-none cursor-pointer"
+                title="เลือกแสดงชื่อเจ้าหน้าที่ในตารางเวรตามสถานะ Active"
+              >
+                <option value="active">🟢 เฉพาะ Active (กำลังปฏิบัติงาน)</option>
+                <option value="all">👥 แสดงทั้งหมด (รวม Inactive)</option>
+                <option value="inactive">⚪ เฉพาะ Inactive (พักงาน)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Action Button Strip */}
@@ -310,22 +342,30 @@ export const Header: React.FC<HeaderProps> = ({
             <>
               <button
                 type="button"
+                onClick={onOpenAutoScheduleModal}
+                className="px-3 py-1.5 bg-[#8B1E27] hover:bg-[#721820] text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-md transition-all hover:scale-[1.02] cursor-pointer ring-1 ring-amber-400"
+                title="จัดเวรอัตโนมัติทุกเวรที่มี โดยสามารถเลือกหลายเวรพร้อมกัน"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                <span>⚡ จัดเวรอัตโนมัติ (เลือกหลายเวร)</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={onRunAutoSchedule}
-                className="px-3 py-1.5 bg-[#8B1E27] hover:bg-[#721820] text-white font-medium text-xs rounded-lg flex items-center gap-1.5 shadow-xs transition-all hover:scale-[1.02] cursor-pointer"
+                className="px-2.5 py-1.5 bg-[#FAF6F0] hover:bg-[#EFE7DC] border border-[#D8C7B5] text-[#8B1E27] font-medium text-xs rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
                 title="จัดเวร บด อัตโนมัติ วน 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือน"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>จัดเวร บด อัตโนมัติ</span>
+                <span>จัดเวร บด</span>
               </button>
 
               <button
                 type="button"
                 onClick={onRunAutoScheduleB}
-                className="px-3 py-1.5 bg-[#B45309] hover:bg-[#92400E] text-white font-medium text-xs rounded-lg flex items-center gap-1.5 shadow-xs transition-all hover:scale-[1.02] cursor-pointer"
+                className="px-2.5 py-1.5 bg-[#FAF6F0] hover:bg-[#EFE7DC] border border-[#D8C7B5] text-[#92400E] font-medium text-xs rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
                 title="จัดเวร บ อัตโนมัติ วน 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือน"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                <span>จัดเวร บ อัตโนมัติ</span>
+                <span>จัดเวร บ</span>
               </button>
             </>
           )}

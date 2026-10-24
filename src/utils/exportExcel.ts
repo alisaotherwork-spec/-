@@ -4,71 +4,49 @@ import { THAI_MONTHS, getDayOfWeekThai } from './scheduler';
 
 /**
  * Exports the OT Compensation claim sheet as Excel file (.xlsx)
+ * Formatted with 5 columns, 1 row per OT duty date descending per staff, and no summary row
  */
 export function exportOtClaimToExcel(
   year: number,
   month: number,
   room: RoomType | 'all',
-  summaries: MonthlyStaffSummary[],
-  shiftsMap: Record<string, string>,
-  daysInMonth: number,
-  shiftDefs: ShiftDefinition[]
+  staffOtList: Array<{
+    staff: Staff;
+    otDates: Array<{
+      day: number;
+      dayOfWeek: string;
+      shiftCode: string;
+      dateLabel: string;
+    }>;
+  }>,
+  monthName: string,
+  thaiYear: number
 ) {
-  const thaiYear = year + 543;
-  const monthName = THAI_MONTHS[month - 1];
-  const roomName = room === 'lab' ? 'ห้องปฏิบัติการ' : room === 'donation' ? 'ห้องบริจาคโลหิต' : 'ทุกห้องการทำงาน';
+  const roomName = room === 'lab' ? 'ห้องปฏิบัติการ' : room === 'donation' ? 'ห้องรับบริจาคโลหิต' : 'รวมทุกห้อง';
 
   // Build rows for OT Claim
   const rows: Array<Record<string, any>> = [];
 
-  let grandTotalHours = 0;
-  let grandTotalAmount = 0;
-  let runningIndex = 1;
-
-  // Filter only staff with OT or list all staff
-  const staffWithOt = summaries.filter((s) => s.otCount > 0);
-  const displayList = staffWithOt.length > 0 ? staffWithOt : summaries;
-
-  displayList.forEach((item) => {
-    // Find all OT dates for this staff
-    const otDates: string[] = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const code = shiftsMap[`${item.staffId}_${d}`];
-      if (code) {
-        const def = shiftDefs.find((s) => s.code.toLowerCase() === code.trim().toLowerCase());
-        if (def?.isOt || /^OT/i.test(code)) {
-          otDates.push(`${d}`);
-        }
-      }
+  staffOtList.forEach((item, staffIdx) => {
+    if (item.otDates.length === 0) {
+      rows.push({
+        'ลำดับ': staffIdx + 1,
+        'ชื่อ - สกุล': item.staff.name,
+        'ตำแหน่ง': item.staff.position,
+        'วันที่ปฏิบัติงาน OT': '-',
+        'ลายมือชื่อผู้ขอเบิก': '',
+      });
+    } else {
+      item.otDates.forEach((ot, dateIdx) => {
+        rows.push({
+          'ลำดับ': dateIdx === 0 ? staffIdx + 1 : '',
+          'ชื่อ - สกุล': dateIdx === 0 ? item.staff.name : '',
+          'ตำแหน่ง': dateIdx === 0 ? item.staff.position : '',
+          'วันที่ปฏิบัติงาน OT': ot.dateLabel,
+          'ลายมือชื่อผู้ขอเบิก': '',
+        });
+      });
     }
-
-    grandTotalHours += item.otHours;
-    grandTotalAmount += item.otIncome;
-
-    rows.push({
-      'ลำดับ': runningIndex++,
-      'ชื่อ - สกุล': item.staff.name,
-      'ตำแหน่ง': item.staff.position,
-      'ประเภท': item.staff.section === 'MT' ? 'นักเทคนิคการแพทย์' : item.staff.section === 'SUPPORT' ? 'สายสนับสนุน' : 'Part-time',
-      'วันที่ปฏิบัติงาน OT': otDates.join(', ') || '-',
-      'จำนวนครั้ง': item.otCount,
-      'จำนวนชั่วโมง OT (ชม.)': item.otHours,
-      'รวมเป็นเงิน (บาท)': item.otIncome,
-      'หมายเหตุ / ลายมือชื่อ': '',
-    });
-  });
-
-  // Summary Row
-  rows.push({
-    'ลำดับ': '',
-    'ชื่อ - สกุล': 'รวมทั้งสิ้น',
-    'ตำแหน่ง': '',
-    'ประเภท': '',
-    'วันที่ปฏิบัติงาน OT': '',
-    'จำนวนครั้ง': '',
-    'จำนวนชั่วโมง OT (ชม.)': grandTotalHours,
-    'รวมเป็นเงิน (บาท)': grandTotalAmount,
-    'หมายเหตุ / ลายมือชื่อ': '',
   });
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -77,19 +55,15 @@ export function exportOtClaimToExcel(
   worksheet['!cols'] = [
     { wch: 8 },  // ลำดับ
     { wch: 32 }, // ชื่อ - สกุล
-    { wch: 12 }, // ตำแหน่ง
-    { wch: 20 }, // ประเภท
-    { wch: 30 }, // วันที่ปฏิบัติงาน OT
-    { wch: 12 }, // จำนวนครั้ง
-    { wch: 22 }, // จำนวนชั่วโมง OT
-    { wch: 20 }, // รวมเงิน
+    { wch: 14 }, // ตำแหน่ง
+    { wch: 45 }, // วันที่ปฏิบัติงาน OT
     { wch: 25 }, // ลายมือชื่อ
   ];
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, `OT_${monthName}_${thaiYear}`);
 
-  const fileName = `ใบเบิกค่าตอบแทน_OT_${roomName}_${monthName}_${thaiYear}.xlsx`;
+  const fileName = `ใบสำคัญขออนุมัติเบิกเงิน_OT_${roomName}_${monthName}_${thaiYear}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
 

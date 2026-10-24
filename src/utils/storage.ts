@@ -21,7 +21,13 @@ export function loadStaffList(): Staff[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Enforce Nichapa is 'head' and NOT super_admin as per user requirement
+        return parsed.map((s) => {
+          if (s.id === 'staff-1') {
+            return { ...s, role: 'head' };
+          }
+          return s;
+        });
       }
     }
   } catch (e) {
@@ -131,21 +137,22 @@ export function loadCurrentUser(): CurrentUser | null {
   try {
     const raw = localStorage.getItem(CURRENT_USER_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed) {
+        // Enforce that Nichapa is 'head' and NOT super_admin
+        if (parsed.staffId === 'staff-1' && parsed.role === 'super_admin') {
+          parsed.role = 'head';
+          parsed.name = 'ทนพญ.ณิชาภา เจียมจรรยา (หัวหน้าห้อง)';
+          localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(parsed));
+        }
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Error loading current user:', e);
   }
-  const defaultUser: CurrentUser = {
-    id: 'user-nichapa',
-    username: SUPER_ADMIN_CREDENTIALS.username,
-    name: 'ทนพญ.ณิชาภา เจียมจรรยา (หัวหน้างาน)',
-    role: 'super_admin',
-    staffId: 'staff-1',
-    mustChangePassword: false,
-  };
-  saveCurrentUser(defaultUser);
-  return defaultUser;
+  // No user logged in by default: require logging in through the Login screen first
+  return null;
 }
 
 export function saveCurrentUser(user: CurrentUser | null): void {

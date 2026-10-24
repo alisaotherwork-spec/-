@@ -56,15 +56,26 @@
   background: #8B1E27;
 }
 
-/* Print Rules for A4 Landscape & Portrait */
+/* Print Rules for A4 Portrait & Landscape */
 @media print {
   @page {
-    margin: 8mm 6mm 8mm 6mm;
+    size: A4 portrait;
+    margin: 10mm 10mm 12mm 10mm;
   }
-  
-  body {
-    background: white !important;
-    color: black !important;
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Force exact background colors and borders in Chrome / Safari / Edge / Firefox */
+  *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -77,16 +88,91 @@
     display: block !important;
   }
 
-  .page-break {
-    page-break-before: always !important;
+  /* Modal un-nesting: allow printable sheet to span multiple A4 pages seamlessly */
+  .printable-modal-overlay {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    z-index: auto !important;
   }
 
-  /* Ensure table headers repeat nicely */
-  thead {
+  .printable-modal-card {
+    position: static !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    display: block !important;
+  }
+
+  .printable-sheet {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    display: block !important;
+  }
+
+  .printable-table-container {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    display: block !important;
+  }
+
+  /* Table styling and header repetition across all printed pages */
+  table.printable-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  table.printable-table thead {
     display: table-header-group !important;
   }
 
-  tr {
+  table.printable-table tbody {
+    display: table-row-group !important;
+  }
+
+  table.printable-table tr {
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  table.printable-table th,
+  table.printable-table td {
+    border-color: #78716c !important; /* Stone-500 border for crisp printing */
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .page-break {
+    page-break-before: always !important;
+    break-before: always !important;
   }
 }
+
