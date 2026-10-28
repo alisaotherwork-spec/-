@@ -4,14 +4,18 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Staff, ShiftDefinition, CurrentUser, RoomType, MonthlyStaffSummary } from './types';
+import { Staff, ShiftDefinition, CurrentUser, RoomType } from './types';
 import {
   loadStaffList,
   saveStaffList,
+  updateSingleStaffFields,
   loadShiftDefs,
   saveShiftDefs,
   loadMonthSchedule,
   saveMonthSchedule,
+  updateSingleShiftCell,
+  isMonthScheduleInitialized,
+  syncMonthScheduleWithFirestore,
   loadCurrentUser,
   saveCurrentUser,
   initializeFirestoreSync,
@@ -48,8 +52,12 @@ export default function App() {
   // Loaded data
   const [staffList, setStaffList] = useState<Staff[]>(() => loadStaffList());
   const [shiftDefs, setShiftDefs] = useState<ShiftDefinition[]>(() => loadShiftDefs());
-  const [shiftsMap, setShiftsMap] = useState<Record<string, string>>({});
-  const [roomAssignments, setRoomAssignments] = useState<Record<string, RoomType>>({});
+  const [shiftsMap, setShiftsMap] = useState<Record<string, string>>(() => {
+    return loadMonthSchedule(2026, 10, 'all').shifts;
+  });
+  const [roomAssignments, setRoomAssignments] = useState<Record<string, RoomType>>(() => {
+    return loadMonthSchedule(2026, 10, 'all').roomAssignments;
+  });
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => loadCurrentUser());
 
   // Modals
@@ -71,7 +79,7 @@ export default function App() {
   // Days in selected month
   const daysInMonth = useMemo(() => getDaysInMonth(year, month), [year, month]);
 
-  // Boot Firestore sync on initial mount
+  // Boot Firestore sync on initial mount without overwriting local edits
   useEffect(() => {
     initializeFirestoreSync().then((res) => {
       if (res.connected) {
@@ -81,25 +89,48 @@ export default function App() {
     });
   }, []);
 
-  // Load schedule whenever year, month, or room changes
+  // Load schedule whenever year or month changes (room filter only filters view, never splits schedule)
   useEffect(() => {
-    const data = loadMonthSchedule(year, month, room);
-    
-    // If the month schedule is completely empty on first load, seed with standard cascading schedule for MTs
-    if (Object.keys(data.shifts).length === 0) {
-      const seeded = generateAutoSchedule({
-        mtStaffList: staffList,
-        daysInMonth: getDaysInMonth(year, month),
-        shiftCode: 'บด',
-      });
-      setShiftsMap(seeded);
-      setRoomAssignments(data.roomAssignments);
-      saveMonthSchedule(year, month, room, seeded, data.roomAssignments);
-    } else {
-      setShiftsMap(data.shifts);
-      setRoomAssignments(data.roomAssignments);
+    let isCancelled = false;
+    const localData = loadMonthSchedule(year, month, 'all');
+    const alreadyInit =
+      isMonthScheduleInitialized(year, month) || Object.keys(localData.shifts).length > 0;
+
+    if (alreadyInit) {
+      setShiftsMap(localData.shifts);
+      setRoomAssignments(localData.roomAssignments);
     }
-  }, [year, month, room]);
+
+    syncMonthScheduleWithFirestore(year, month).then((synced) => {
+      if (isCancelled) return;
+      if (synced.hasExistingData) {
+        setShiftsMap(synced.shifts);
+        setRoomAssignments(synced.roomAssignments);
+      } else {
+        // Seed initial schedule ONLY if neither local storage nor Firestore has any record for this month
+        const currentStaff = loadStaffList();
+        const seeded = generateAutoSchedule({
+          mtStaffList: currentStaff,
+          daysInMonth: getDaysInMonth(year, month),
+          shiftCode: 'บด',
+        });
+        setShiftsMap(seeded);
+        setRoomAssignments(synced.roomAssignments);
+        saveMonthSchedule(
+          year,
+          month,
+          'all',
+          seeded,
+          synced.roomAssignments,
+          currentUser?.username || 'alisa'
+        );
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [year, month]);
 
   const showToast = (message: string) => {
     setNotification(message);
@@ -132,20 +163,20 @@ export default function App() {
     return calculateAllStaffMonthlySummaries(staffList, daysInMonth, shiftsMap, shiftDefs);
   }, [staffList, daysInMonth, shiftsMap, shiftDefs]);
 
-  // Handle single shift cell update
+  // Handle single shift cell update (sends ONLY the single modified cell)
   const handleUpdateShift = (staffId: string, day: number, newCode: string) => {
-    const updated = { ...shiftsMap };
-    const key = `${staffId}_${day}`;
-    if (!newCode || newCode.trim() === '') {
-      delete updated[key];
-    } else {
-      updated[key] = newCode.trim();
-    }
-    setShiftsMap(updated);
-    saveMonthSchedule(year, month, room, updated, roomAssignments);
+    const updatedShifts = updateSingleShiftCell(
+      year,
+      month,
+      staffId,
+      day,
+      newCode,
+      currentUser?.username || 'alisa'
+    );
+    setShiftsMap(updatedShifts);
   };
 
-  // Quick 1-click Auto Schedule for 'บด'
+  // Quick 1-click Auto Schedule for 'บด' (modifies only active MT staff shifts, preserving all other staff shifts)
   const handleRunAutoSchedule = () => {
     const newShifts = generateAutoSchedule({
       mtStaffList: staffList,
@@ -156,13 +187,13 @@ export default function App() {
     });
 
     setShiftsMap(newShifts);
-    saveMonthSchedule(year, month, room, newShifts, roomAssignments);
+    saveMonthSchedule(year, month, 'all', newShifts, roomAssignments, currentUser?.username || 'alisa');
     showToast(
       `จัดเวร บด อัตโนมัติสำหรับนักเทคนิคการแพทย์ (MT) สำเร็จแล้ว: วนลำดับ 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือน ${THAI_MONTHS[month - 1]} พ.ศ. ${year + 543}`
     );
   };
 
-  // Quick 1-click Auto Schedule for 'บ'
+  // Quick 1-click Auto Schedule for 'บ' (modifies only active MT staff shifts, preserving all other staff shifts)
   const handleRunAutoScheduleB = () => {
     const newShifts = generateAutoSchedule({
       mtStaffList: staffList,
@@ -173,7 +204,7 @@ export default function App() {
     });
 
     setShiftsMap(newShifts);
-    saveMonthSchedule(year, month, room, newShifts, roomAssignments);
+    saveMonthSchedule(year, month, 'all', newShifts, roomAssignments, currentUser?.username || 'alisa');
     showToast(
       `จัดเวร บ อัตโนมัติสำหรับนักเทคนิคการแพทย์ (MT) สำเร็จแล้ว: วนลำดับ 1 ถึง 14 วันละ 1 คนตลอดทั้งเดือน ${THAI_MONTHS[month - 1]} พ.ศ. ${year + 543}`
     );
@@ -201,33 +232,33 @@ export default function App() {
     });
 
     setShiftsMap(newShifts);
-    saveMonthSchedule(year, month, room, newShifts, roomAssignments);
+    saveMonthSchedule(year, month, 'all', newShifts, roomAssignments, currentUser?.username || 'alisa');
     showToast(
       `จัดเวรอัตโนมัติสำเร็จ: [${config.selectedShifts.join(', ')}] ประจำเดือน ${THAI_MONTHS[month - 1]} พ.ศ. ${year + 543}`
     );
   };
 
-  // Save updated staff list
+  // Save updated staff list (saveStaffList diffs and sends ONLY modified fields of modified staff)
   const handleSaveStaffList = (newStaffList: Staff[]) => {
-    setStaffList(newStaffList);
     saveStaffList(newStaffList);
-    showToast('บันทึกรายชื่อเจ้าหน้าที่และห้องปฏิบัติงานเรียบร้อยแล้ว');
+    setStaffList(loadStaffList());
+    showToast('บันทึกเฉพาะข้อมูลเจ้าหน้าที่ที่มีการเปลี่ยนแปลงเรียบร้อยแล้ว');
   };
 
-  // Save updated shift defs
+  // Save updated shift defs (saveShiftDefs diffs and sends ONLY modified shift definitions)
   const handleSaveShiftDefs = (newDefs: ShiftDefinition[]) => {
-    setShiftDefs(newDefs);
     saveShiftDefs(newDefs);
-    showToast('บันทึกรหัสเวรและอัตราค่าตอบแทนเรียบร้อยแล้ว');
+    setShiftDefs(loadShiftDefs());
+    showToast('บันทึกเฉพาะรหัสเวรและอัตราค่าตอบแทนที่มีการแก้ไขเรียบร้อยแล้ว');
   };
 
-  // Handle password change
+  // Handle password change (sends ONLY password & mustChangePassword for that single staff member)
   const handlePasswordChanged = (staffId: string, newPass: string) => {
-    const updatedStaff = staffList.map((s) =>
-      s.id === staffId ? { ...s, password: newPass, mustChangePassword: false } : s
-    );
+    const updatedStaff = updateSingleStaffFields(staffId, {
+      password: newPass,
+      mustChangePassword: false,
+    });
     setStaffList(updatedStaff);
-    saveStaffList(updatedStaff);
 
     if (currentUser) {
       const updatedUser: CurrentUser = {

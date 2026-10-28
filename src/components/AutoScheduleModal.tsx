@@ -54,7 +54,7 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
   };
 
   // Quick Presets
-  const setPreset = (preset: 'bd' | 'b' | 'three' | 'ot' | 'all' | 'clear') => {
+  const setPreset = (preset: 'bd' | 'b' | 'three' | 'ot' | 'all' | 'clear' | 'mt' | 'amt' | 'office' | 'service') => {
     switch (preset) {
       case 'bd':
         setSelectedShifts(['บด']);
@@ -67,6 +67,50 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
         break;
       case 'ot':
         setSelectedShifts(shiftDefs.filter((s) => s.isOt || /^OT/i.test(s.code)).map((s) => s.code));
+        break;
+      case 'mt':
+        setSelectedShifts(
+          shiftDefs
+            .filter(
+              (s) =>
+                (s.rates?.MT || 0) > 0 &&
+                (!s.applicablePositions || s.applicablePositions.includes('MT'))
+            )
+            .map((s) => s.code)
+        );
+        break;
+      case 'amt':
+        setSelectedShifts(
+          shiftDefs
+            .filter(
+              (s) =>
+                (s.rates?.AMT || 0) > 0 &&
+                (!s.applicablePositions || s.applicablePositions.includes('AMT'))
+            )
+            .map((s) => s.code)
+        );
+        break;
+      case 'office':
+        setSelectedShifts(
+          shiftDefs
+            .filter(
+              (s) =>
+                (s.rates?.Office || 0) > 0 &&
+                (!s.applicablePositions || s.applicablePositions.includes('Office'))
+            )
+            .map((s) => s.code)
+        );
+        break;
+      case 'service':
+        setSelectedShifts(
+          shiftDefs
+            .filter(
+              (s) =>
+                (s.rates?.Service || 0) > 0 &&
+                (!s.applicablePositions || s.applicablePositions.includes('Service'))
+            )
+            .map((s) => s.code)
+        );
         break;
       case 'all':
         setSelectedShifts(shiftDefs.map((s) => s.code));
@@ -148,27 +192,52 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
               </div>
 
               {/* Quick Presets */}
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1 text-xs">
                 <button
                   type="button"
                   onClick={() => setPreset('bd')}
                   className="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded-md font-medium text-stone-700 cursor-pointer"
                 >
-                  เวร บด
+                  บด
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreset('b')}
                   className="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded-md font-medium text-stone-700 cursor-pointer"
                 >
-                  เวร บ
+                  บ
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPreset('three')}
-                  className="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded-md font-medium text-stone-700 cursor-pointer"
+                  onClick={() => setPreset('mt')}
+                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-[#8B1E27] border border-amber-300 rounded-md font-semibold cursor-pointer"
+                  title="เลือกทุกรหัสเวรสำหรับตำแหน่ง MT"
                 >
-                  ช, บ, ด
+                  เวร MT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreset('amt')}
+                  className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 rounded-md font-semibold cursor-pointer"
+                  title="เลือกทุกรหัสเวรสำหรับตำแหน่ง AMT"
+                >
+                  เวร AMT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreset('office')}
+                  className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 rounded-md font-semibold cursor-pointer"
+                  title="เลือกทุกรหัสเวรสำหรับตำแหน่ง Office"
+                >
+                  เวร Office
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreset('service')}
+                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-md font-semibold cursor-pointer"
+                  title="เลือกทุกรหัสเวรสำหรับตำแหน่ง Service"
+                >
+                  เวร Service
                 </button>
                 <button
                   type="button"
@@ -182,7 +251,7 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
                   onClick={() => setPreset('all')}
                   className="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded-md font-medium text-stone-700 cursor-pointer"
                 >
-                  เลือกทั้งหมด
+                  ทั้งหมด
                 </button>
                 <button
                   type="button"

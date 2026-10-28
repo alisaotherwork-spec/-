@@ -369,82 +369,179 @@ export const DutyTable: React.FC<DutyTableProps> = ({
         </table>
       </div>
 
-      {/* Floating Inline Shift Selector Popover */}
-      {activeCell && (
-        <div
-          ref={popoverRef}
-          className="fixed z-50 p-3 paper-card bg-[#FFFDF7] border-2 border-[#8B1E27] shadow-2xl rounded-xl w-72 animate-in fade-in zoom-in-95"
-          style={{
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-          }}
-        >
-          <div className="flex items-center justify-between pb-2 border-b border-[#E5D5C5] mb-2">
-            <span className="font-heading font-bold text-xs text-[#4A2E18]">
-              กำหนดรหัสเวร: วันที่ {activeCell.day}
-            </span>
-            <button
-              onClick={() => setActiveCell(null)}
-              className="text-stone-400 hover:text-stone-800"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+      {/* Floating Inline Shift Selector Popover with Position-Specific Shift Codes */}
+      {activeCell && (() => {
+        const activeStaff = staffList.find((s) => s.id === activeCell.staffId);
+        const staffPos = activeStaff?.position || 'MT';
 
-          <div className="text-[11px] text-stone-600 mb-2">
-            คลิกเลือกรหัสเวรด่วน หรือพิมพ์รหัส 1-4 ตัว:
-          </div>
+        // Filter shifts for this popover
+        const posSpecificShifts = shiftDefs.filter((s) => {
+          const isApplicable =
+            !s.applicablePositions ||
+            s.applicablePositions.length === 0 ||
+            s.applicablePositions.includes(staffPos);
+          const hasRate = (s.rates?.[staffPos] || 0) > 0;
+          return isApplicable && hasRate;
+        });
 
-          {/* Quick Buttons */}
-          <div className="grid grid-cols-5 gap-1.5 mb-3">
-            {quickShiftCodes.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => handleSelectCode(c)}
-                className="py-1 px-1 bg-[#F5EFE6] hover:bg-[#8B1E27] hover:text-white border border-[#D8C7B5] rounded-md font-bold text-xs text-[#4A2E18] transition-colors"
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+        const regularShifts = shiftDefs.filter((s) => !s.isOt && !/^OT/i.test(s.code));
+        const otShifts = shiftDefs.filter((s) => s.isOt || /^OT/i.test(s.code));
 
-          {/* Custom Input */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSelectCode(customInput.trim());
+        return (
+          <div
+            ref={popoverRef}
+            className="fixed z-50 p-3.5 paper-card bg-[#FFFDF7] border-2 border-[#8B1E27] shadow-2xl rounded-2xl w-[340px] sm:w-[420px] max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95"
+            style={{
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
             }}
-            className="flex items-center gap-1.5 mb-2"
           >
-            <input
-              type="text"
-              maxLength={4}
-              value={customInput}
-              onChange={(e) => setCustomInput(e.target.value)}
-              placeholder="รหัส 1-4 ตัว"
-              className="flex-1 p-1.5 text-xs bg-white border border-[#D8C7B5] rounded-md font-bold text-stone-900 uppercase focus:outline-none focus:ring-1 focus:ring-[#8B1E27]"
-              autoFocus
-            />
-            <button
-              type="submit"
-              className="px-3 py-1.5 bg-[#8B1E27] text-white text-xs font-semibold rounded-md hover:bg-[#721820]"
-            >
-              บันทึก
-            </button>
-          </form>
+            {/* Popover Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-[#E5D5C5] mb-2 shrink-0">
+              <div>
+                <div className="font-heading font-bold text-xs sm:text-sm text-[#4A2E18] flex items-center gap-1.5">
+                  <span>กำหนดรหัสเวร: วันที่ {activeCell.day}</span>
+                  <span className="px-1.5 py-0.2 rounded-sm bg-[#8B1E27] text-white text-[10px] font-bold">
+                    {staffPos}
+                  </span>
+                </div>
+                <div className="text-[11px] text-stone-600 truncate max-w-[280px]">
+                  {activeStaff?.name}
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveCell(null)}
+                className="text-stone-400 hover:text-stone-800 p-1 rounded-md hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-          {/* Clear Shift (100% empty blank) */}
-          <button
-            type="button"
-            onClick={() => handleSelectCode('')}
-            className="w-full py-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md font-medium transition-colors"
-          >
-            ล้างเวรออก (เป็นช่องว่าง)
-          </button>
-        </div>
-      )}
+            {/* Custom Input for Direct Typing */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSelectCode(customInput.trim());
+              }}
+              className="flex items-center gap-1.5 mb-2.5 shrink-0"
+            >
+              <input
+                type="text"
+                maxLength={4}
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                placeholder="พิมพ์รหัสเวรเอง (เช่น ช, บ, ด, บด)"
+                className="flex-1 p-1.5 text-xs bg-white border border-[#D8C7B5] rounded-md font-bold text-stone-900 uppercase focus:outline-none focus:ring-1 focus:ring-[#8B1E27]"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="px-3 py-1.5 bg-[#8B1E27] hover:bg-[#721820] text-white text-xs font-semibold rounded-md shadow-2xs cursor-pointer"
+              >
+                บันทึก
+              </button>
+            </form>
+
+            {/* Scrollable Shift Codes Palette specifically for this Position */}
+            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1 text-xs">
+              
+              {/* 1. Position-Specific Shifts Section */}
+              <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200">
+                <div className="font-bold text-[11px] text-amber-950 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-[#8B1E27]" />
+                    <span>รหัสเวรเฉพาะตำแหน่ง {staffPos} ({posSpecificShifts.length} รหัส):</span>
+                  </span>
+                  <span className="text-[10px] text-stone-500 font-normal">คลิกเพื่อเลือกทันที</span>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+                  {posSpecificShifts.map((s) => {
+                    const rate = s.rates?.[staffPos] || 0;
+                    return (
+                      <button
+                        key={s.code}
+                        type="button"
+                        onClick={() => handleSelectCode(s.code)}
+                        className={`p-1 rounded-md border text-center transition-all cursor-pointer hover:scale-105 shadow-2xs ${
+                          s.isOt
+                            ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
+                            : 'bg-white hover:bg-amber-100 border-[#D8C7B5] text-[#8B1E27]'
+                        }`}
+                        title={`${s.name} • อัตราค่าเวร: ${rate.toLocaleString()} บาท`}
+                      >
+                        <div className="font-mono font-bold text-xs">{s.code}</div>
+                        <div className="text-[9px] text-stone-500 truncate">
+                          {rate > 0 ? `${rate.toLocaleString()}บ.` : s.name}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. All OT Shifts (OT1 - OT4) */}
+              <div className="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200">
+                <div className="font-bold text-[11px] text-emerald-950 mb-1.5 flex items-center gap-1">
+                  <span>เวรล่วงเวลา (OT 1 - 4 ชม.):</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {otShifts.map((s) => {
+                    const rate = s.rates?.[staffPos] || 0;
+                    return (
+                      <button
+                        key={s.code}
+                        type="button"
+                        onClick={() => handleSelectCode(s.code)}
+                        className="p-1 rounded-md border border-emerald-300 bg-white hover:bg-emerald-100 text-emerald-900 text-center transition-all cursor-pointer hover:scale-105 shadow-2xs"
+                        title={`${s.name} • อัตราค่าเวร: ${rate.toLocaleString()} บาท`}
+                      >
+                        <div className="font-mono font-bold text-xs text-emerald-800">{s.code}</div>
+                        <div className="text-[9px] text-emerald-600 truncate">
+                          {s.otHours} ชม. ({rate > 0 ? `${rate}บ.` : ''})
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. Regular Shift Codes (Grouped) if wanting other codes */}
+              {regularShifts.length > posSpecificShifts.length && (
+                <div className="p-2 rounded-xl border border-stone-200 bg-stone-50/80">
+                  <div className="font-bold text-[11px] text-stone-700 mb-1.5">
+                    รหัสเวรปกติทั้งหมดในระบบ ({regularShifts.length} รหัส):
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+                    {regularShifts.map((s) => (
+                      <button
+                        key={s.code}
+                        type="button"
+                        onClick={() => handleSelectCode(s.code)}
+                        className="p-1 rounded-md border border-stone-200 bg-white hover:bg-stone-100 text-stone-800 text-center transition-all cursor-pointer hover:scale-105 shadow-2xs font-mono font-bold text-xs"
+                        title={s.name}
+                      >
+                        {s.code}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Clear Shift Button */}
+            <div className="pt-2.5 mt-2 border-t border-[#E5D5C5] shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSelectCode('')}
+                className="w-full py-1.5 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg font-medium transition-colors cursor-pointer"
+              >
+                ล้างเวรออก (เป็นช่องว่าง)
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

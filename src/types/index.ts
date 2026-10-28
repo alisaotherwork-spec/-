@@ -40,6 +40,7 @@ export interface ShiftDefinition {
     Office: number;
     Service: number;
   };
+  applicablePositions?: Position[]; // e.g. ['MT', 'AMT', 'Office', 'Service']
   colorBg?: string;
   colorText?: string;
   colorBorder?: string;

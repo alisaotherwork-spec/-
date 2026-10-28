@@ -6,12 +6,14 @@ import {
   getDoc,
   getDocFromServer,
   setDoc,
+  deleteField,
   collection,
   getDocs,
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Staff, ShiftDefinition, RoomType } from '../types';
+import { StaffDelta, stripUndefined } from './deltaDiff';
 
 export enum OperationType {
   CREATE = 'create',
@@ -75,7 +77,34 @@ export async function testConnection(): Promise<boolean> {
 }
 
 /**
- * Syncs staff list to Firestore
+ * Patches ONLY modified staff fields and deletes removed staff in Firestore
+ */
+export async function patchStaffInFirestore(
+  staffUpdates: StaffDelta[],
+  deletedIds: string[] = []
+): Promise<void> {
+  if (staffUpdates.length === 0 && deletedIds.length === 0) {
+    return;
+  }
+  const path = 'staff';
+  try {
+    const batch = writeBatch(db);
+    staffUpdates.forEach((delta) => {
+      const ref = doc(db, path, delta.id);
+      batch.set(ref, stripUndefined(delta.changes), { merge: true });
+    });
+    deletedIds.forEach((delId) => {
+      const ref = doc(db, path, delId);
+      batch.delete(ref);
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+/**
+ * Syncs staff list to Firestore (merge-safe)
  */
 export async function saveStaffListToFirestore(staffList: Staff[]): Promise<void> {
   const path = 'staff';
@@ -83,7 +112,7 @@ export async function saveStaffListToFirestore(staffList: Staff[]): Promise<void
     const batch = writeBatch(db);
     staffList.forEach((staff) => {
       const ref = doc(db, path, staff.id);
-      batch.set(ref, staff);
+      batch.set(ref, stripUndefined({ ...staff }), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -113,7 +142,36 @@ export async function fetchStaffListFromFirestore(): Promise<Staff[] | null> {
 }
 
 /**
- * Syncs shift definitions to Firestore
+ * Patches ONLY modified shift definitions and deletes removed ones in Firestore
+ */
+export async function patchShiftDefsInFirestore(
+  changedDefs: ShiftDefinition[],
+  deletedCodes: string[] = []
+): Promise<void> {
+  if (changedDefs.length === 0 && deletedCodes.length === 0) {
+    return;
+  }
+  const path = 'shiftDefinitions';
+  try {
+    const batch = writeBatch(db);
+    changedDefs.forEach((shift) => {
+      const safeId = encodeURIComponent(shift.code);
+      const ref = doc(db, path, safeId);
+      batch.set(ref, stripUndefined({ ...shift }), { merge: true });
+    });
+    deletedCodes.forEach((code) => {
+      const safeId = encodeURIComponent(code);
+      const ref = doc(db, path, safeId);
+      batch.delete(ref);
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+/**
+ * Syncs shift definitions to Firestore (merge-safe)
  */
 export async function saveShiftDefsToFirestore(shiftDefs: ShiftDefinition[]): Promise<void> {
   const path = 'shiftDefinitions';
@@ -123,7 +181,7 @@ export async function saveShiftDefsToFirestore(shiftDefs: ShiftDefinition[]): Pr
       // Use encoded code for safe Firestore doc ID
       const safeId = encodeURIComponent(shift.code);
       const ref = doc(db, path, safeId);
-      batch.set(ref, shift);
+      batch.set(ref, stripUndefined({ ...shift }), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -153,7 +211,68 @@ export async function fetchShiftDefsFromFirestore(): Promise<ShiftDefinition[] |
 }
 
 /**
- * Syncs a monthly schedule to Firestore
+ * Patches ONLY modified schedule cells and room assignments to Firestore using setDoc(..., { merge: true })
+ * Cleared cells (null or '') use deleteField() so unrelated shift cells are never disturbed.
+ */
+export async function patchScheduleCellsInFirestore(
+  year: number,
+  month: number,
+  room: RoomType | 'all',
+  cellDeltas: Record<string, string | null>,
+  roomAssignmentDeltas: Record<string, RoomType | null> = {},
+  updatedBy: string = 'alisa'
+): Promise<void> {
+  const cellKeys = Object.keys(cellDeltas);
+  const roomKeys = Object.keys(roomAssignmentDeltas);
+  if (cellKeys.length === 0 && roomKeys.length === 0) {
+    return;
+  }
+
+  const scheduleId = `${year}_${month}_${room}`;
+  const path = `schedules/${scheduleId}`;
+  try {
+    const ref = doc(db, 'schedules', scheduleId);
+    const firestoreShiftsDelta: Record<string, any> = {};
+    for (const [key, val] of Object.entries(cellDeltas)) {
+      if (val === null || val.trim() === '') {
+        firestoreShiftsDelta[key] = deleteField();
+      } else {
+        firestoreShiftsDelta[key] = val.trim();
+      }
+    }
+
+    const firestoreRoomsDelta: Record<string, any> = {};
+    for (const [key, val] of Object.entries(roomAssignmentDeltas)) {
+      if (val === null) {
+        firestoreRoomsDelta[key] = deleteField();
+      } else {
+        firestoreRoomsDelta[key] = val;
+      }
+    }
+
+    const payload: Record<string, any> = {
+      year,
+      month,
+      room,
+      updatedAt: new Date().toISOString(),
+      updatedBy,
+    };
+
+    if (cellKeys.length > 0) {
+      payload.shifts = firestoreShiftsDelta;
+    }
+    if (roomKeys.length > 0) {
+      payload.roomAssignments = firestoreRoomsDelta;
+    }
+
+    await setDoc(ref, payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+/**
+ * Syncs a monthly schedule to Firestore (merge-safe)
  */
 export async function saveScheduleToFirestore(
   year: number,
@@ -167,15 +286,19 @@ export async function saveScheduleToFirestore(
   const path = `schedules/${scheduleId}`;
   try {
     const ref = doc(db, 'schedules', scheduleId);
-    await setDoc(ref, {
-      year,
-      month,
-      room,
-      shifts,
-      roomAssignments,
-      updatedAt: new Date().toISOString(),
-      updatedBy,
-    });
+    await setDoc(
+      ref,
+      {
+        year,
+        month,
+        room,
+        shifts,
+        roomAssignments,
+        updatedAt: new Date().toISOString(),
+        updatedBy,
+      },
+      { merge: true }
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -207,3 +330,4 @@ export async function fetchScheduleFromFirestore(
     return null;
   }
 }
+

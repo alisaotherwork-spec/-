@@ -709,3 +709,126 @@ export const EXTERNAL_LINKS = {
   googleSheets: 'https://docs.google.com/spreadsheets/d/17-GNU4ng1yskG5ciIAlbdaJIj6p2MhxS3wg619z0BwQ/edit?gid=0#gid=0',
   firebaseProject: 'Duty schedule-TM',
 };
+
+export interface ShiftPresetItem {
+  code: string;
+  name: string;
+  category: 'เช้า' | 'บ่าย' | 'ดึก' | 'เวรควบ' | 'OT';
+  isOt?: boolean;
+  otHours?: number;
+  rates: {
+    MT: number;
+    AMT: number;
+    Office: number;
+    Service: number;
+  };
+}
+
+export const POSITION_SPECIFIC_PRESETS: Record<
+  'MT' | 'AMT' | 'Office' | 'Service',
+  ShiftPresetItem[]
+> = {
+  MT: [
+    // เวรเช้า
+    { code: 'ช', name: 'เวรเช้า (Morning)', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช1', name: 'เวรเช้า 1', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช2', name: 'เวรเช้า 2', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช3', name: 'เวรเช้า 3', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    // เวรบ่าย
+    { code: 'บ', name: 'เวรบ่าย (Afternoon)', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ1', name: 'เวรบ่าย 1', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ2', name: 'เวรบ่าย 2', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ3', name: 'เวรบ่าย 3', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    // เวรดึก
+    { code: 'ด', name: 'เวรดึก (Night)', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    { code: 'ด1', name: 'เวรดึก 1', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    { code: 'ด2', name: 'เวรดึก 2', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    // เวรควบ
+    { code: 'ชบ', name: 'เวรเช้า-บ่าย (Morning-Afternoon)', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ1', name: 'เวรเช้า-บ่าย 1', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ2', name: 'เวรเช้า-บ่าย 2', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ3', name: 'เวรเช้า-บ่าย 3', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'บด', name: 'เวรบ่าย-ดึก (Afternoon-Night)', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'บด1', name: 'เวรบ่าย-ดึก 1', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'บด2', name: 'เวรบ่าย-ดึก 2', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'ชบด', name: 'เวรเช้า-บ่าย-ดึก (Full 24h)', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    { code: 'ชบด1', name: 'เวรเช้า-บ่าย-ดึก 1', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    { code: 'ชบด2', name: 'เวรเช้า-บ่าย-ดึก 2', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    // เวรล่วงเวลา (OT)
+    { code: 'OT1', name: 'ล่วงเวลา 1 ชม. (16.00 - 17.00 น.)', category: 'OT', isOt: true, otHours: 1, rates: { MT: 175, AMT: 80, Office: 80, Service: 55 } },
+    { code: 'OT2', name: 'ล่วงเวลา 2 ชม. (16.00 - 18.00 น.)', category: 'OT', isOt: true, otHours: 2, rates: { MT: 350, AMT: 160, Office: 160, Service: 110 } },
+    { code: 'OT3', name: 'ล่วงเวลา 3 ชม. (16.00 - 19.00 น.)', category: 'OT', isOt: true, otHours: 3, rates: { MT: 525, AMT: 240, Office: 240, Service: 165 } },
+    { code: 'OT4', name: 'ล่วงเวลา 4 ชม. (16.00 - 20.00 น.)', category: 'OT', isOt: true, otHours: 4, rates: { MT: 700, AMT: 320, Office: 320, Service: 220 } },
+  ],
+  AMT: [
+    // เวรเช้า
+    { code: 'ช', name: 'เวรเช้า (Morning)', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช1', name: 'เวรเช้า 1', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช2', name: 'เวรเช้า 2', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช3', name: 'เวรเช้า 3', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    // เวรบ่าย
+    { code: 'บ', name: 'เวรบ่าย (Afternoon)', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ1', name: 'เวรบ่าย 1', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ2', name: 'เวรบ่าย 2', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ3', name: 'เวรบ่าย 3', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    // เวรดึก
+    { code: 'ด', name: 'เวรดึก (Night)', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    { code: 'ด1', name: 'เวรดึก 1', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    { code: 'ด2', name: 'เวรดึก 2', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    // เวรควบ
+    { code: 'ชบ', name: 'เวรเช้า-บ่าย (Morning-Afternoon)', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ1', name: 'เวรเช้า-บ่าย 1', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ2', name: 'เวรเช้า-บ่าย 2', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'ชบ3', name: 'เวรเช้า-บ่าย 3', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'บด', name: 'เวรบ่าย-ดึก (Afternoon-Night)', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'บด1', name: 'เวรบ่าย-ดึก 1', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'บด2', name: 'เวรบ่าย-ดึก 2', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'ชบด', name: 'เวรเช้า-บ่าย-ดึก (Full 24h)', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    { code: 'ชบด1', name: 'เวรเช้า-บ่าย-ดึก 1', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    { code: 'ชบด2', name: 'เวรเช้า-บ่าย-ดึก 2', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    // เวรล่วงเวลา (OT)
+    { code: 'OT1', name: 'ล่วงเวลา 1 ชม. (16.00 - 17.00 น.)', category: 'OT', isOt: true, otHours: 1, rates: { MT: 175, AMT: 80, Office: 80, Service: 55 } },
+    { code: 'OT2', name: 'ล่วงเวลา 2 ชม. (16.00 - 18.00 น.)', category: 'OT', isOt: true, otHours: 2, rates: { MT: 350, AMT: 160, Office: 160, Service: 110 } },
+    { code: 'OT3', name: 'ล่วงเวลา 3 ชม. (16.00 - 19.00 น.)', category: 'OT', isOt: true, otHours: 3, rates: { MT: 525, AMT: 240, Office: 240, Service: 165 } },
+    { code: 'OT4', name: 'ล่วงเวลา 4 ชม. (16.00 - 20.00 น.)', category: 'OT', isOt: true, otHours: 4, rates: { MT: 700, AMT: 320, Office: 320, Service: 220 } },
+  ],
+  Office: [
+    // เวรเช้า
+    { code: 'ช', name: 'เวรเช้า (Morning)', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช1', name: 'เวรเช้า 1', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    // เวรบ่าย
+    { code: 'บ', name: 'เวรบ่าย (Afternoon)', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ1', name: 'เวรบ่าย 1', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    // เวรควบ
+    { code: 'ชบ', name: 'เวรเช้า-บ่าย (Morning-Afternoon)', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'บด', name: 'เวรบ่าย-ดึก (Afternoon-Night)', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'ชบด', name: 'เวรเช้า-บ่าย-ดึก (Full 24h)', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    // เวรล่วงเวลา (OT)
+    { code: 'OT1', name: 'ล่วงเวลา 1 ชม. (16.00 - 17.00 น.)', category: 'OT', isOt: true, otHours: 1, rates: { MT: 175, AMT: 80, Office: 80, Service: 55 } },
+    { code: 'OT2', name: 'ล่วงเวลา 2 ชม. (16.00 - 18.00 น.)', category: 'OT', isOt: true, otHours: 2, rates: { MT: 350, AMT: 160, Office: 160, Service: 110 } },
+    { code: 'OT3', name: 'ล่วงเวลา 3 ชม. (16.00 - 19.00 น.)', category: 'OT', isOt: true, otHours: 3, rates: { MT: 525, AMT: 240, Office: 240, Service: 165 } },
+    { code: 'OT4', name: 'ล่วงเวลา 4 ชม. (16.00 - 20.00 น.)', category: 'OT', isOt: true, otHours: 4, rates: { MT: 700, AMT: 320, Office: 320, Service: 220 } },
+  ],
+  Service: [
+    // เวรเช้า
+    { code: 'ช', name: 'เวรเช้า (Morning)', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช1', name: 'เวรเช้า 1', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    { code: 'ช2', name: 'เวรเช้า 2', category: 'เช้า', rates: { MT: 900, AMT: 550, Office: 550, Service: 460 } },
+    // เวรบ่าย
+    { code: 'บ', name: 'เวรบ่าย (Afternoon)', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    { code: 'บ1', name: 'เวรบ่าย 1', category: 'บ่าย', rates: { MT: 1250, AMT: 680, Office: 680, Service: 540 } },
+    // เวรดึก
+    { code: 'ด', name: 'เวรดึก (Night)', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    { code: 'ด1', name: 'เวรดึก 1', category: 'ดึก', rates: { MT: 1270, AMT: 700, Office: 700, Service: 560 } },
+    // เวรควบ
+    { code: 'ชบ', name: 'เวรเช้า-บ่าย (Morning-Afternoon)', category: 'เวรควบ', rates: { MT: 2150, AMT: 1230, Office: 1230, Service: 1000 } },
+    { code: 'บด', name: 'เวรบ่าย-ดึก (Afternoon-Night)', category: 'เวรควบ', rates: { MT: 2520, AMT: 1380, Office: 1380, Service: 1100 } },
+    { code: 'ชบด', name: 'เวรเช้า-บ่าย-ดึก (Full 24h)', category: 'เวรควบ', rates: { MT: 3420, AMT: 1930, Office: 1930, Service: 1560 } },
+    // เวรล่วงเวลา (OT)
+    { code: 'OT1', name: 'ล่วงเวลา 1 ชม. (16.00 - 17.00 น.)', category: 'OT', isOt: true, otHours: 1, rates: { MT: 175, AMT: 80, Office: 80, Service: 55 } },
+    { code: 'OT2', name: 'ล่วงเวลา 2 ชม. (16.00 - 18.00 น.)', category: 'OT', isOt: true, otHours: 2, rates: { MT: 350, AMT: 160, Office: 160, Service: 110 } },
+    { code: 'OT3', name: 'ล่วงเวลา 3 ชม. (16.00 - 19.00 น.)', category: 'OT', isOt: true, otHours: 3, rates: { MT: 525, AMT: 240, Office: 240, Service: 165 } },
+    { code: 'OT4', name: 'ล่วงเวลา 4 ชม. (16.00 - 20.00 น.)', category: 'OT', isOt: true, otHours: 4, rates: { MT: 700, AMT: 320, Office: 320, Service: 220 } },
+  ],
+};
+
