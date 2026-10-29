@@ -20,6 +20,7 @@ interface DutyTableProps {
   onOpenAutoScheduleModal?: () => void;
   activeFilter?: 'active' | 'all' | 'inactive';
   onActiveFilterChange?: (filter: 'active' | 'all' | 'inactive') => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const DutyTable: React.FC<DutyTableProps> = ({
@@ -38,6 +39,7 @@ export const DutyTable: React.FC<DutyTableProps> = ({
   onOpenAutoScheduleModal,
   activeFilter = 'active',
   onActiveFilterChange,
+  onShowToast,
 }) => {
   const [activeCell, setActiveCell] = useState<{ staffId: string; day: number } | null>(null);
   const [customInput, setCustomInput] = useState('');
@@ -92,7 +94,9 @@ export const DutyTable: React.FC<DutyTableProps> = ({
 
   const handleCellClick = (staff: Staff, day: number) => {
     if (!canEditStaffDuty(staff.id)) {
-      alert(`คุณเข้าสู่ระบบในชื่อ "${currentUser?.name || 'บุคคลภายนอก'}" คุณสามารถแก้ไขได้เฉพาะเวรของตนเองเท่านั้น`);
+      onShowToast?.(
+        `คุณเข้าสู่ระบบในชื่อ "${currentUser?.name || 'บุคคลภายนอก'}" คุณสามารถแก้ไขได้เฉพาะเวรของตนเองเท่านั้น`
+      );
       return;
     }
     const currentCode = shiftsMap[`${staff.id}_${day}`] || '';

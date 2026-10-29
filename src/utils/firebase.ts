@@ -64,15 +64,24 @@ export const auth = getAuth(app);
  */
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const snap = await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is offline or connecting...');
+  } catch (error: any) {
+    // If document doesn't exist on server, getDocFromServer returns empty doc snapshot, but if error is thrown check details
+    if (error?.code === 'not-found') {
+      return true;
+    }
+    if (
+      error?.code === 'unavailable' ||
+      error?.code === 'permission-denied' ||
+      error?.code === 'failed-precondition' ||
+      (error instanceof Error && (error.message.includes('offline') || error.message.includes('network')))
+    ) {
+      console.warn('Firestore connection check notice:', error?.message || error);
       return false;
     }
-    // Document not existing is a normal successful connection response
-    return true;
+    console.warn('Firestore connection warning:', error);
+    return false;
   }
 }
 

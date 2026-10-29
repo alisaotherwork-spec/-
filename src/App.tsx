@@ -81,12 +81,16 @@ export default function App() {
 
   // Boot Firestore sync on initial mount without overwriting local edits
   useEffect(() => {
-    initializeFirestoreSync().then((res) => {
-      if (res.connected) {
-        setStaffList(loadStaffList());
-        setShiftDefs(loadShiftDefs());
-      }
-    });
+    initializeFirestoreSync()
+      .then((res) => {
+        if (res.connected) {
+          setStaffList(loadStaffList());
+          setShiftDefs(loadShiftDefs());
+        }
+      })
+      .catch((err) => {
+        console.warn('Initial Firestore sync caught error:', err);
+      });
   }, []);
 
   // Load schedule whenever year or month changes (room filter only filters view, never splits schedule)
@@ -101,31 +105,35 @@ export default function App() {
       setRoomAssignments(localData.roomAssignments);
     }
 
-    syncMonthScheduleWithFirestore(year, month).then((synced) => {
-      if (isCancelled) return;
-      if (synced.hasExistingData) {
-        setShiftsMap(synced.shifts);
-        setRoomAssignments(synced.roomAssignments);
-      } else {
-        // Seed initial schedule ONLY if neither local storage nor Firestore has any record for this month
-        const currentStaff = loadStaffList();
-        const seeded = generateAutoSchedule({
-          mtStaffList: currentStaff,
-          daysInMonth: getDaysInMonth(year, month),
-          shiftCode: 'บด',
-        });
-        setShiftsMap(seeded);
-        setRoomAssignments(synced.roomAssignments);
-        saveMonthSchedule(
-          year,
-          month,
-          'all',
-          seeded,
-          synced.roomAssignments,
-          currentUser?.username || 'alisa'
-        );
-      }
-    });
+    syncMonthScheduleWithFirestore(year, month)
+      .then((synced) => {
+        if (isCancelled) return;
+        if (synced.hasExistingData) {
+          setShiftsMap(synced.shifts);
+          setRoomAssignments(synced.roomAssignments);
+        } else {
+          // Seed initial schedule ONLY if neither local storage nor Firestore has any record for this month
+          const currentStaff = loadStaffList();
+          const seeded = generateAutoSchedule({
+            mtStaffList: currentStaff,
+            daysInMonth: getDaysInMonth(year, month),
+            shiftCode: 'บด',
+          });
+          setShiftsMap(seeded);
+          setRoomAssignments(synced.roomAssignments);
+          saveMonthSchedule(
+            year,
+            month,
+            'all',
+            seeded,
+            synced.roomAssignments,
+            currentUser?.username || 'alisa'
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn('Schedule sync caught error:', err);
+      });
 
     return () => {
       isCancelled = true;
@@ -363,6 +371,7 @@ export default function App() {
               onOpenAutoScheduleModal={() => setIsAutoScheduleModalOpen(true)}
               activeFilter={activeFilter}
               onActiveFilterChange={setActiveFilter}
+              onShowToast={showToast}
             />
           </main>
 

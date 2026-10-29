@@ -3,7 +3,8 @@ import { Staff, ShiftDefinition, MonthlyStaffSummary, RoomType } from '../types'
 import { THAI_MONTHS, getDayOfWeekThai } from '../utils/scheduler';
 import { exportOtClaimToExcel } from '../utils/exportExcel';
 import { FileSpreadsheet, Printer, Clock, FileDown, Loader2 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 
 interface OtClaimModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ interface OtClaimModalProps {
   summaries: MonthlyStaffSummary[];
 }
 
-interface StaffOtItem {
+export interface StaffOtItem {
   staff: Staff;
   otDates: {
     day: number;
@@ -27,6 +28,15 @@ interface StaffOtItem {
     timePeriod: string;
     dateLabel: string;
   }[];
+}
+
+export interface OtClaimPageChunk {
+  pageNumber: number;
+  totalPages: number;
+  items: StaffOtItem[];
+  startIndex: number;
+  isFirstPage: boolean;
+  isLastPage: boolean;
 }
 
 /**
@@ -54,6 +64,104 @@ export function getOtTimePeriod(code: string, def?: ShiftDefinition): string {
   return '16.00 - 20.00 น.';
 }
 
+/**
+ * Partitions staff OT records into discrete A4 portrait pages to guarantee:
+ * 1. Table header columns (thead) repeat at the top of every single page.
+ * 2. Rows never get sliced/cut in half across page boundaries.
+ * 3. Page 1 accommodates the full document title header.
+ * 4. The last page accommodates official hospital signatures.
+ * 5. Sequence numbers ("ลำดับ") remain continuous across pages.
+ */
+export function chunkStaffOtForPdf(items: StaffOtItem[]): OtClaimPageChunk[] {
+  if (items.length === 0) {
+    return [
+      {
+        pageNumber: 1,
+        totalPages: 1,
+        items: [],
+        startIndex: 0,
+        isFirstPage: true,
+        isLastPage: true,
+      },
+    ];
+  }
+
+  // Row height estimation:
+  // Base staff row (names, position, borders, padding) ~ 46px
+  // Each OT date item in Column 4 adds ~ 23px
+  const getStaffRowHeight = (item: StaffOtItem) => {
+    const datesCount = Math.max(1, item.otDates.length);
+    return Math.max(48, datesCount * 23 + 22);
+  };
+
+  const totalSinglePageHeight = items.reduce((sum, item) => sum + getStaffRowHeight(item), 0);
+  // Total A4 height is 1120px.
+  // Page 1 budget: 1120 - 80 (padding) - 130 (header) - 44 (table head) - 160 (signatures) = ~706px
+  if (totalSinglePageHeight <= 700) {
+    return [
+      {
+        pageNumber: 1,
+        totalPages: 1,
+        items,
+        startIndex: 0,
+        isFirstPage: true,
+        isLastPage: true,
+      },
+    ];
+  }
+
+  // Multi-page chunking
+  const pages: StaffOtItem[][] = [];
+  const startIndices: number[] = [];
+  const remaining = [...items];
+  let currentStartIdx = 0;
+
+  while (remaining.length > 0) {
+    const isFirst = pages.length === 0;
+    // Page 1 has the primary document header, so row capacity is around 820px
+    // Subsequent pages have a compact subheader, so row capacity is around 880px
+    const pageCapacity = isFirst ? 820 : 880;
+
+    const pageItems: StaffOtItem[] = [];
+    let currentHeight = 0;
+
+    while (remaining.length > 0) {
+      const nextItem = remaining[0];
+      const nextItemHeight = getStaffRowHeight(nextItem);
+
+      // If this is the last of remaining items, reserve 160px for signatures
+      const isRemainingLast = remaining.length === 1;
+      const signatureReserve = isRemainingLast ? 160 : 0;
+
+      if (pageItems.length > 0 && currentHeight + nextItemHeight + signatureReserve > pageCapacity) {
+        break;
+      }
+
+      pageItems.push(remaining.shift()!);
+      currentHeight += nextItemHeight;
+    }
+
+    if (pageItems.length === 0 && remaining.length > 0) {
+      pageItems.push(remaining.shift()!);
+    }
+
+    pages.push(pageItems);
+    startIndices.push(currentStartIdx);
+    currentStartIdx += pageItems.length;
+  }
+
+  const totalPages = pages.length;
+
+  return pages.map((pageItems, idx) => ({
+    pageNumber: idx + 1,
+    totalPages,
+    items: pageItems,
+    startIndex: startIndices[idx],
+    isFirstPage: idx === 0,
+    isLastPage: idx === totalPages - 1,
+  }));
+}
+
 export const OtClaimModal: React.FC<OtClaimModalProps> = ({
   isOpen,
   onClose,
@@ -64,7 +172,7 @@ export const OtClaimModal: React.FC<OtClaimModalProps> = ({
   staffList,
   shiftsMap,
   shiftDefs,
-  summaries,
+  summaries: _summaries,
 }) => {
   const [onlyWithOt, setOnlyWithOt] = useState<boolean>(true);
   const [sectionFilter, setSectionFilter] = useState<'ALL' | 'MT' | 'SUPPORT' | 'PART_TIME'>('ALL');
@@ -116,6 +224,11 @@ export const OtClaimModal: React.FC<OtClaimModalProps> = ({
       });
   }, [isOpen, staffList, shiftsMap, shiftDefs, sectionFilter, onlyWithOt, daysInMonth, monthName, thaiYear, year, month]);
 
+  // Partition into A4-sized pages with repeating headers and no cut rows
+  const pageChunks = useMemo(() => {
+    return chunkStaffOtForPdf(staffOtList);
+  }, [staffOtList]);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -127,39 +240,39 @@ export const OtClaimModal: React.FC<OtClaimModalProps> = ({
   };
 
   const handleDownloadPdf = async () => {
-    const element = document.getElementById('ot-claim-printable-content');
-    if (!element) return;
-
     setIsGeneratingPdf(true);
     try {
-      const generator = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || html2pdf;
+      const pageElements = document.querySelectorAll<HTMLElement>('.ot-claim-pdf-page');
+      if (pageElements.length === 0) return;
 
-      const opt = {
-        margin: [8, 8, 10, 8] as [number, number, number, number],
-        filename: `ใบสำคัญขออนุมัติเบิกเงิน_OT_${roomName}_${monthName}_${thaiYear}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i];
+        const canvas = await html2canvas(pageEl, {
           scale: 2,
           useCORS: true,
-          letterRendering: true,
-          logging: false,
-          scrollY: 0,
           backgroundColor: '#ffffff',
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-        },
-        pagebreak: {
-          mode: ['avoid-all', 'css', 'legacy'],
-          avoid: ['tr', '.print-avoid-break'],
-        },
-      };
+          logging: false,
+        });
 
-      await generator().set(opt).from(element).save();
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+        if (i > 0) {
+          pdf.addPage('a4', 'portrait');
+        }
+
+        // Standard A4 portrait size: 210mm width x 297mm height
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      }
+
+      pdf.save(`ใบสำคัญขออนุมัติเบิกเงิน_OT_${roomName}_${monthName}_${thaiYear}.pdf`);
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
+      console.error('Failed to generate OT Claim PDF:', error);
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -197,7 +310,7 @@ export const OtClaimModal: React.FC<OtClaimModalProps> = ({
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
               className="px-3.5 py-2 bg-rose-700 hover:bg-rose-600 disabled:bg-stone-500 text-white font-medium text-xs rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-              title="ดาวน์โหลดไฟล์ PDF ขนาด A4 จัดรูปแบบสวยงาม"
+              title="ดาวน์โหลดไฟล์ PDF ขนาด A4 จัดรูปแบบสวยงาม คงหัวตารางทุกหน้า"
             >
               {isGeneratingPdf ? (
                 <>
@@ -259,192 +372,221 @@ export const OtClaimModal: React.FC<OtClaimModalProps> = ({
 
           <div className="text-xs text-stone-700 bg-white px-3 py-1.5 rounded-lg border border-[#D8C7B5]">
             <span>รวมทั้งหมด: <strong className="text-emerald-800 font-bold">{staffOtList.reduce((sum, s) => sum + s.otDates.length, 0)} วันปฏิบัติงาน OT</strong></span>
+            {pageChunks.length > 1 && (
+              <span className="ml-2 text-stone-500 font-normal">
+                (จัดแบ่งพิมพ์ {pageChunks.length} หน้า A4)
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Printable Sheet View - Formatted for official hospital A4 paper */}
+        {/* Printable Paper Document Container - Official A4 format with Repeating Header on every page */}
         <div
           id="ot-claim-printable-content"
-          className="printable-sheet p-6 sm:p-10 overflow-y-auto flex-1 bg-white text-black print:p-0"
+          className="p-4 sm:p-6 overflow-y-auto flex-1 bg-stone-100 print:bg-white print:p-0"
         >
-          {/* Printable Page Header */}
-          <div className="print-avoid-break text-center pb-4 mb-4 border-b-2 border-stone-800" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-            <div className="text-xs uppercase tracking-wider font-semibold text-stone-600">
-              โรงพยาบาลธรรมศาสตร์เฉลิมพระเกียรติ
-            </div>
-            <h2 className="text-lg sm:text-xl font-bold font-heading text-stone-900 mt-1">
-              ใบสำคัญขออนุมัติเบิกเงินค่าตอบแทนการปฏิบัติงานนอกเวลาราชการ (OT)
-            </h2>
-            <div className="text-xs sm:text-sm text-stone-700 mt-1.5 flex flex-wrap justify-center gap-3">
-              <span>งานเวชศาสตร์บริการโลหิต</span>
-              <span>•</span>
-              <span>ห้องการทำงาน: <strong className="text-stone-900">{roomName}</strong></span>
-              <span>•</span>
-              <span>ประจำเดือน <strong className="text-stone-900">{monthName} พ.ศ. {thaiYear}</strong></span>
-            </div>
-          </div>
-
-          {/* Formatted Table: 
-              - Replaced OT1, OT2, OT3, OT4 with duty time periods (ช่วงเวลาที่ปฏิบัติงาน)
-              - 5 Columns with fixed table layout perfectly sized for A4 portrait
-              - 1 cell per duty date descending sequentially per person
-              - Repeating thead across all print pages
-          */}
-          <div className="printable-table-container overflow-x-auto border border-stone-800 rounded-sm">
-            <table
-              className="printable-table w-full text-xs border-collapse border border-stone-800"
-              style={{ tableLayout: 'fixed', width: '100%' }}
-            >
-              <colgroup>
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '27%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '35%' }} />
-                <col style={{ width: '18%' }} />
-              </colgroup>
-              <thead
-                style={{ display: 'table-header-group' }}
-                className="bg-stone-200 text-stone-900 font-bold border-b-2 border-stone-800"
+          {pageChunks.map((chunk) => (
+            <React.Fragment key={`ot-chunk-${chunk.pageNumber}`}>
+              <div
+                className="ot-claim-pdf-page printable-sheet bg-white text-stone-900 border border-stone-300 shadow-md mx-auto p-8 sm:p-10 mb-6 print:border-none print:shadow-none print:m-0 print:p-6"
+                style={{
+                  width: '794px',
+                  minHeight: '1120px',
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  backgroundColor: '#ffffff',
+                  breakAfter: 'page',
+                  pageBreakAfter: 'always',
+                }}
               >
-                <tr>
-                  <th className="p-2.5 border border-stone-600 text-center bg-stone-200 font-bold text-stone-950">
-                    ลำดับ
-                  </th>
-                  <th className="p-2.5 border border-stone-600 text-left bg-stone-200 font-bold text-stone-950">
-                    ชื่อ - สกุล
-                  </th>
-                  <th className="p-2.5 border border-stone-600 text-center bg-stone-200 font-bold text-stone-950">
-                    ตำแหน่ง
-                  </th>
-                  {/* Duty dates listed 1 cell per day descending with duty time period */}
-                  <th className="p-2.5 border border-stone-600 text-left bg-stone-200 font-bold text-stone-950">
-                    วันที่ปฏิบัติงาน OT
-                  </th>
-                  <th className="p-2.5 border border-stone-600 text-center bg-stone-200 font-bold text-stone-950">
-                    ลายมือชื่อผู้ขอเบิก
-                  </th>
-                </tr>
-              </thead>
-              <tbody style={{ display: 'table-row-group' }}>
-                {staffOtList.length > 0 ? (
-                  staffOtList.map((item, staffIdx) => {
-                    const rowCount = Math.max(1, item.otDates.length);
-                    const hasDates = item.otDates.length > 0;
+                {/* Document Header on Page 1 or Compact Subheader on Subsequent Pages */}
+                {chunk.isFirstPage ? (
+                  <div
+                    className="print-avoid-break text-center pb-2.5 mb-3 border-b-2 border-stone-900"
+                    style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+                  >
+                    <div className="text-xs uppercase tracking-wider font-semibold text-stone-600">
+                      โรงพยาบาลธรรมศาสตร์เฉลิมพระเกียรติ
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-bold font-heading text-stone-950 mt-1">
+                      ใบสำคัญขออนุมัติเบิกเงินค่าตอบแทนการปฏิบัติงานนอกเวลาราชการ (OT)
+                    </h2>
+                    <div className="text-xs sm:text-sm text-stone-800 mt-1.5 flex flex-wrap justify-center items-center gap-2.5">
+                      <span>งานเวชศาสตร์บริการโลหิต</span>
+                      <span>•</span>
+                      <span>
+                        ห้องการทำงาน: <strong className="text-stone-950 font-semibold">{roomName}</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        ประจำเดือน <strong className="text-stone-950 font-semibold">{monthName} พ.ศ. {thaiYear}</strong>
+                      </span>
+                      {chunk.totalPages > 1 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-stone-600 font-medium">
+                            (หน้า {chunk.pageNumber} จาก {chunk.totalPages})
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="print-avoid-break pb-2 mb-3 border-b-2 border-stone-700 flex items-center justify-between text-xs"
+                    style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+                  >
+                    <span className="font-semibold text-stone-700">
+                      โรงพยาบาลธรรมศาสตร์เฉลิมพระเกียรติ • งานเวชศาสตร์บริการโลหิต
+                    </span>
+                    <span className="font-bold text-stone-900">
+                      ใบสำคัญขออนุมัติเบิกเงินค่าตอบแทน OT (ต่อ) - ประจำเดือน {monthName} พ.ศ. {thaiYear}
+                    </span>
+                    <span className="font-medium text-stone-600 bg-stone-100 px-2 py-0.5 rounded-xs border border-stone-300">
+                      หน้า {chunk.pageNumber} จาก {chunk.totalPages}
+                    </span>
+                  </div>
+                )}
 
-                    return (
-                      <React.Fragment key={item.staff.id}>
-                        {/* First row for this staff */}
-                        <tr
-                          className="border-b border-stone-300 hover:bg-stone-50 print:hover:bg-transparent"
-                          style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
-                        >
-                          {/* Column 1: ลำดับ (rowspan over all OT dates of this person) */}
-                          <td
-                            rowSpan={rowCount}
-                            className="p-2 border border-stone-400 text-center font-mono align-top font-bold text-stone-800 bg-stone-50/50"
-                          >
-                            {staffIdx + 1}
-                          </td>
-
-                          {/* Column 2: ชื่อ - สกุล (rowspan) */}
-                          <td
-                            rowSpan={rowCount}
-                            className="p-2 border border-stone-400 font-semibold text-stone-950 align-top"
-                          >
-                            <div>{item.staff.name}</div>
-                            {item.staff.englishName && (
-                              <div className="text-[10px] text-stone-500 font-normal italic">
-                                {item.staff.englishName}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Column 3: ตำแหน่ง (rowspan) */}
-                          <td
-                            rowSpan={rowCount}
-                            className="p-2 border border-stone-400 text-center font-medium text-stone-700 align-top"
-                          >
-                            <span className="px-2 py-0.5 rounded-sm bg-stone-100 border border-stone-300">
-                              {item.staff.position}
-                            </span>
-                          </td>
-
-                          {/* Column 4: วันที่ปฏิบัติงาน OT - Day 1 with duty time period */}
-                          <td className="p-2 border border-stone-400 text-stone-900 font-medium bg-white">
-                            {hasDates ? (
-                              <span>
-                                วันที่ {item.otDates[0].day} {monthName} {thaiYear} ({item.otDates[0].dayOfWeek}){' '}
-                                <strong className="text-stone-950 font-semibold">เวลา {item.otDates[0].timePeriod}</strong>
-                              </span>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-
-                          {/* Column 5: ลายมือชื่อผู้ขอเบิก (rowspan) */}
-                          <td
-                            rowSpan={rowCount}
-                            className="p-2 border border-stone-400 text-center align-middle text-stone-400"
-                          >
-                            <div className="py-2">....................................</div>
-                          </td>
-                        </tr>
-
-                        {/* Subsequent rows for this staff member's other OT duty dates */}
-                        {item.otDates.slice(1).map((otItem, dateIdx) => (
+                {/* Formatted Table matching image_e0d8fa80.png:
+                    - Table Header (thead) repeats at the top of EVERY SINGLE PAGE
+                    - Columns: ลำดับ (6.5%), ชื่อ - สกุล (25%), ตำแหน่ง (11.5%), วันที่ปฏิบัติงาน OT (39%), ลายมือชื่อผู้ขอเบิก (18%)
+                    - Clean solid borders and professional layout
+                */}
+                <div
+                  className={`printable-table-container overflow-x-auto border border-stone-800 rounded-xs ${
+                    chunk.isLastPage ? 'mb-4' : 'flex-1 mb-2'
+                  }`}
+                >
+                  <table
+                    className="printable-table w-full text-xs border-collapse border border-stone-800 bg-white"
+                    style={{ tableLayout: 'fixed', width: '100%' }}
+                  >
+                    <colgroup>
+                      <col style={{ width: '6.5%' }} />
+                      <col style={{ width: '25%' }} />
+                      <col style={{ width: '11.5%' }} />
+                      <col style={{ width: '39%' }} />
+                      <col style={{ width: '18%' }} />
+                    </colgroup>
+                    <thead
+                      style={{ display: 'table-header-group' }}
+                      className="bg-[#E5E7EB] text-stone-950 font-bold border-b border-stone-800"
+                    >
+                      <tr>
+                        <th className="py-2.5 px-2 border border-stone-800 text-center bg-[#E5E7EB] font-bold text-stone-950 text-xs sm:text-sm">
+                          ลำดับ
+                        </th>
+                        <th className="py-2.5 px-3 border border-stone-800 text-left bg-[#E5E7EB] font-bold text-stone-950 text-xs sm:text-sm">
+                          ชื่อ - สกุล
+                        </th>
+                        <th className="py-2.5 px-2 border border-stone-800 text-center bg-[#E5E7EB] font-bold text-stone-950 text-xs sm:text-sm">
+                          ตำแหน่ง
+                        </th>
+                        <th className="py-2.5 px-3 border border-stone-800 text-left bg-[#E5E7EB] font-bold text-stone-950 text-xs sm:text-sm">
+                          วันที่ปฏิบัติงาน OT
+                        </th>
+                        <th className="py-2.5 px-2 border border-stone-800 text-center bg-[#E5E7EB] font-bold text-stone-950 text-xs sm:text-sm">
+                          ลายมือชื่อผู้ขอเบิก
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody style={{ display: 'table-row-group' }}>
+                      {chunk.items.length > 0 ? (
+                        chunk.items.map((item, staffIdx) => (
                           <tr
-                            key={`${item.staff.id}_ot_${otItem.day}_${dateIdx}`}
-                            className="border-b border-stone-300 hover:bg-stone-50 print:hover:bg-transparent"
+                            key={item.staff.id}
+                            className="border-b border-stone-800 hover:bg-stone-50/50 print:hover:bg-transparent"
                             style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
                           >
-                            {/* Only the duty date cell is rendered here, others are covered by rowSpan */}
-                            <td className="p-2 border border-stone-400 text-stone-900 font-medium bg-white">
-                              <span>
-                                วันที่ {otItem.day} {monthName} {thaiYear} ({otItem.dayOfWeek}){' '}
-                                <strong className="text-stone-950 font-semibold">เวลา {otItem.timePeriod}</strong>
+                            {/* Column 1: ลำดับ (Continuous across pages) */}
+                            <td className="p-2.5 border border-stone-800 text-center font-bold text-stone-900 align-top text-xs sm:text-sm">
+                              {chunk.startIndex + staffIdx + 1}
+                            </td>
+
+                            {/* Column 2: ชื่อ - สกุล */}
+                            <td className="p-2.5 border border-stone-800 text-left align-top">
+                              <div className="font-bold text-stone-950 text-xs sm:text-sm leading-snug">
+                                {item.staff.name}
+                              </div>
+                              {item.staff.englishName && (
+                                <div className="text-[11px] text-stone-500 font-normal italic mt-0.5">
+                                  {item.staff.englishName}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Column 3: ตำแหน่ง (MT badge pill with border) */}
+                            <td className="p-2.5 border border-stone-800 text-center align-top">
+                              <span className="inline-block px-3 py-0.5 rounded-md text-xs font-medium text-stone-700 bg-stone-100 border border-stone-300">
+                                {item.staff.position || 'MT'}
                               </span>
                             </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="p-8 text-center text-stone-500 border border-stone-400">
-                      ไม่พบรายการเบิกจ่ายค่าตอบแทน OT สำหรับเงื่อนไขที่เลือก
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
 
-          {/* Official Signatures (No grand total row as requested) */}
-          <div
-            className="print-avoid-break mt-10 grid grid-cols-2 gap-8 text-center text-xs"
-            style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
-          >
-            <div>
-              <div className="h-10"></div>
-              <p className="border-t border-dotted border-stone-500 pt-2 inline-block px-10">
-                ลงชื่อ......................................................ผู้ตรวจสอบและรวบรวม
-              </p>
-              <p className="text-[11px] text-stone-600 mt-1">ตำแหน่ง เจ้าหน้าที่งานเวชศาสตร์บริการโลหิต</p>
-            </div>
-            <div>
-              <div className="h-10"></div>
-              <p className="border-t border-dotted border-stone-500 pt-2 inline-block px-10">
-                ลงชื่อ......................................................หัวหน้างานเวชศาสตร์บริการโลหิต
-              </p>
-              <p className="text-[11px] text-stone-800 font-semibold mt-1">
-                (ทนพญ.ณิชาภา เจียมจรรยา)
-              </p>
-            </div>
-          </div>
+                            {/* Column 4: วันที่ปฏิบัติงาน OT */}
+                            <td className="p-0 border border-stone-800 align-top">
+                              {item.otDates.length > 0 ? (
+                                <div className="divide-y divide-stone-300">
+                                  {item.otDates.map((otItem, dateIdx) => (
+                                    <div
+                                      key={dateIdx}
+                                      className="px-3 py-1.5 text-xs text-stone-900 font-normal leading-normal"
+                                    >
+                                      วันที่ {otItem.day} {monthName} {thaiYear} ({otItem.dayOfWeek}) เวลา {otItem.timePeriod}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="px-3 py-2 text-xs text-stone-400 text-center">-</div>
+                              )}
+                            </td>
+
+                            {/* Column 5: ลายมือชื่อผู้ขอเบิก (pure blank for signature) */}
+                            <td className="p-2.5 border border-stone-800 align-middle text-center bg-white"></td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-stone-500 border border-stone-800">
+                            ไม่พบรายการเบิกจ่ายค่าตอบแทน OT สำหรับเงื่อนไขที่เลือก
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Official Signatures on Last Page (No grand total row) */}
+                {chunk.isLastPage && (
+                  <div
+                    className="print-avoid-break mt-auto pt-6 grid grid-cols-2 gap-8 text-center text-xs"
+                    style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+                  >
+                    <div>
+                      <div className="h-10"></div>
+                      <p className="border-t border-dotted border-stone-500 pt-2 inline-block px-10">
+                        ลงชื่อ......................................................ผู้ตรวจสอบและรวบรวม
+                      </p>
+                      <p className="text-[11px] text-stone-600 mt-1">ตำแหน่ง เจ้าหน้าที่งานเวชศาสตร์บริการโลหิต</p>
+                    </div>
+                    <div>
+                      <div className="h-10"></div>
+                      <p className="border-t border-dotted border-stone-500 pt-2 inline-block px-10">
+                        ลงชื่อ......................................................หัวหน้างานเวชศาสตร์บริการโลหิต
+                      </p>
+                      <p className="text-[11px] text-stone-800 font-semibold mt-1">
+                        (ทนพญ.ณิชาภา เจียมจรรยา)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       </div>
     </div>
   );
 };
-
