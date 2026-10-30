@@ -142,11 +142,11 @@ export const DutyTable: React.FC<DutyTableProps> = ({
                   <th
                     key={d}
                     className={`p-1.5 text-center min-w-[38px] max-w-[42px] border-r border-[#E5D5C5] transition-colors ${
-                      weekend ? 'bg-amber-100/90 text-[#8B1E27] font-bold' : ''
+                      weekend ? 'bg-[#FCD34D] text-[#78350F] font-bold shadow-xs' : ''
                     }`}
                   >
                     <div className="text-sm font-heading font-bold">{d}</div>
-                    <div className={`text-[10px] ${weekend ? 'text-red-700 font-semibold' : 'text-stone-500'}`}>
+                    <div className={`text-[10px] ${weekend ? 'text-[#78350F] font-bold' : 'text-stone-500'}`}>
                       {dayTh}
                     </div>
                   </th>
@@ -321,8 +321,10 @@ export const DutyTable: React.FC<DutyTableProps> = ({
                               key={d}
                               onClick={() => handleCellClick(staff, d)}
                               className={`p-0 text-center border-r border-[#E5D5C5] transition-all relative ${
-                                isEditable ? 'cursor-pointer hover:bg-amber-100/50' : 'cursor-not-allowed opacity-90'
-                              } ${weekend ? 'bg-amber-50/50' : ''} ${
+                                isEditable
+                                  ? (weekend ? 'cursor-pointer hover:bg-[#FCD34D]/50' : 'cursor-pointer hover:bg-amber-100/50')
+                                  : 'cursor-not-allowed opacity-90'
+                              } ${weekend ? 'bg-[#FEEBB0]' : ''} ${
                                 isActive ? 'ring-2 ring-[#8B1E27] z-20 bg-white' : ''
                               }`}
                             >
