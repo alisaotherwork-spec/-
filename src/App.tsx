@@ -226,6 +226,7 @@ export default function App() {
     startStaffOrder: number;
     staggerMultipleShifts: boolean;
     overwriteExisting: boolean;
+    customStaffOrderIds?: string[];
   }) => {
     const newShifts = generateMultiShiftAutoSchedule({
       staffList,
@@ -236,6 +237,7 @@ export default function App() {
       startOrderIndex: config.startStaffOrder,
       staggerMultipleShifts: config.staggerMultipleShifts,
       overwriteExisting: config.overwriteExisting,
+      customStaffOrderIds: config.customStaffOrderIds,
       existingShifts: shiftsMap,
     });
 

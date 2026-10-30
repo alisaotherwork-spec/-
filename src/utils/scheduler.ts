@@ -110,6 +110,7 @@ export interface MultiShiftAutoScheduleParams {
   startOrderIndex?: number;
   staggerMultipleShifts?: boolean;
   overwriteExisting?: boolean;
+  customStaffOrderIds?: string[];
   existingShifts?: Record<string, string>;
 }
 
@@ -117,7 +118,7 @@ export interface MultiShiftAutoScheduleParams {
  * Enhanced Multi-Shift Auto Scheduler:
  * Can automatically schedule ANY and MULTIPLE shifts simultaneously across the month.
  * - Supports all shift codes (ช, บ, ด, ชบ, บด, ชบด, OT1, OT2, etc.)
- * - Rotates fairly across staff members
+ * - Rotates fairly across staff members in specified or custom order
  * - Staggers multiple shifts on the same day to prevent assigning the same staff to 2 shifts unless requested
  */
 export function generateMultiShiftAutoSchedule(
@@ -132,6 +133,7 @@ export function generateMultiShiftAutoSchedule(
     startOrderIndex = 0,
     staggerMultipleShifts = true,
     overwriteExisting = true,
+    customStaffOrderIds,
     existingShifts = {},
   } = params;
 
@@ -140,18 +142,26 @@ export function generateMultiShiftAutoSchedule(
   }
 
   // Filter eligible staff
-  const eligibleStaff = staffList
-    .filter((s) => {
-      if (!s.isActive) return false;
-      if (targetSection !== 'ALL' && s.section !== targetSection) return false;
-      if (targetRoom !== 'all') {
-        if (s.defaultRoom && s.defaultRoom !== 'both' && s.defaultRoom !== targetRoom) {
-          return false;
-        }
+  const eligibleStaffBase = staffList.filter((s) => {
+    if (!s.isActive) return false;
+    if (targetSection !== 'ALL' && s.section !== targetSection) return false;
+    if (targetRoom !== 'all') {
+      if (s.defaultRoom && s.defaultRoom !== 'both' && s.defaultRoom !== targetRoom) {
+        return false;
       }
-      return true;
-    })
-    .sort((a, b) => a.order - b.order);
+    }
+    return true;
+  });
+
+  let eligibleStaff: Staff[] = [];
+  if (customStaffOrderIds && customStaffOrderIds.length > 0) {
+    const idMap = new Map(eligibleStaffBase.map((s) => [s.id, s]));
+    eligibleStaff = customStaffOrderIds
+      .map((id) => idMap.get(id))
+      .filter((s): s is Staff => s !== undefined);
+  } else {
+    eligibleStaff = eligibleStaffBase.sort((a, b) => a.order - b.order);
+  }
 
   if (eligibleStaff.length === 0) {
     return { ...existingShifts };

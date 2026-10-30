@@ -27,6 +27,7 @@ export interface MultiShiftAutoScheduleConfig {
   startStaffOrder: number;
   staggerMultipleShifts: boolean; // avoid double booking on the same day
   overwriteExisting: boolean;
+  customStaffOrderIds?: string[]; // Custom sequence of staff IDs for auto-assignment
 }
 
 export interface ShiftDefinition {
